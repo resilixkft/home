@@ -29,7 +29,7 @@ setTimeout(function () {
     glassNb: M('white', { glass: 2, tint: [0.10, 0.12, 0.13], alpha: 0.96, spec: 1.6, shin: 220, refl: 0.6, transparent: true, cull: false }),
     curtain: M('curtain', { transparent: true, cull: false, castShadow: false, alpha: 0.85 }),
     bamboo: M('bamboo', { transparent: true, cull: false, alpha: 0.95 }), poly: M('white', { tint: [0.85, 0.88, 0.85], alpha: 0.28, transparent: true, cull: false, spec: 0.8, shin: 80, castShadow: false }),
-    fence: M('fence', { cull: false, alphaTest: 0.5 }),
+    fence: M('fence', { cull: false, alphaTest: 0.5 }), fenceBoard: M('fenceBoard', { spec: 0.05, shin: 10 }), plinthBlock: M('plinthBlock', { spec: 0.04 }),
     blueConcrete: M('concrete', { tint: [0.60, 0.72, 1.22] }), coping: M('concrete', { tint: [0.92, 0.94, 0.95] }), stoneCap: M('concrete', { tint: [1.85, 1.75, 1.55] }),
     slatWood: M('woodDark', { tint: [0.30, 0.27, 0.26], spec: 0.08, shin: 14 }), plate: M('plate', { spec: 0.7, shin: 60, refl: 0.2 }), grate: M('grate', { cull: false, alphaTest: 0.5 }),
     deskMatte: M('deskAtlas', { spec: 0.14, shin: 30 }), deskGloss: M('deskAtlas', { spec: 1.0, shin: 140, refl: 0.22 }), memo: M('memo', { spec: 0.18, shin: 50 }),

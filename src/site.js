@@ -47,8 +47,10 @@ function buildSite(B) {
   for (let y = -38; y < 62; y += 6) B.poly('paint', [[-16.9, y, -0.815], [-16.78, y, -0.815], [-16.78, y + 3, -0.815], [-16.9, y + 3, -0.815]], [0, 0, 1], { col: '#e9e6dc', ext: 1 });
   buildFrontFence(B);
   B.mirror = false; B.group = 'site';
+  // our outer side boundary (on the right coming in through the gate): timber fence on a concrete plinth
+  buildSideFence(B);
+  B.mirror = false; B.group = 'site'; B.extF = 1;
   // side & rear boundary hedges (thuja)
-  B.box(-11.2, 26.0, 24.05, 24.75, -1.5, 1.85, { mat: 'foliage', ext: 1, collide: true });
   B.box(-11.2, 26.0, MIRROR_Y - 24.75, MIRROR_Y - 24.05, -1.5, 1.85, { mat: 'foliage', ext: 1, collide: true });
   B.box(25.8, 26.6, -0.8, 24.75, -1.8, 1.4, { mat: 'foliage', ext: 1, collide: true });
   // timber fence between the two back gardens
@@ -119,6 +121,61 @@ function buildSite(B) {
   // distant tree line
   for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2, r = 46 + (i % 3) * 5, x = 8 + Math.cos(a) * r, y = 12 + Math.sin(a) * r;
     if (x < -22 && x > -60 && Math.abs(y - 12) < 30) continue; (i % 2 ? decid : conifer)(x, y, 9 + (i % 4) * 2, 3 + (i % 3)); }
+}
+
+// ---------- Side boundary fence (from the photos) ----------
+// Grey concrete block plinth with a rounded coping, dark steel posts and angle rails with a bolt per board,
+// weathered red-brown vertical boards with uneven tops. Runs along our outer side from the street pier to the
+// rear hedge; plinth and panels step down with the garden.
+function buildSideFence(B) {
+  B.mirror = false; B.group = 'site'; B.extF = 1;
+  const R = rng(4242);
+  const xA = -11.07, xB = 25.80;           // street brick pier .. rear hedge
+  const pY0 = 24.08, pY1 = 24.32;          // plinth, our face .. neighbour's face
+  const postY0 = 24.14, postY1 = 24.20;    // 60 mm square posts on our side of the boards
+  const railY = 24.200, bY0 = 24.207, bY1 = 24.229; // angle rails behind the posts, 22 mm boards behind the rails
+  const PL = 0.40, CAP = 0.07, HT = 1.66;  // plinth above our ground, rounded coping, fence above the plinth
+  const frame = { mat: 'zinc', col: '#2e2722', ext: 1 };
+  const boardCols = ['#ffffff', '#f6e8de', '#eadbd0', '#fff4ec', '#e2dace', '#d9cabd', '#efe4d6', '#e4e0d0'];
+  const n = Math.max(1, Math.round((xB - xA) / 2.25)), pitch = (xB - xA - 0.06) / n;
+  const postX = []; for (let i = 0; i <= n; i++) postX.push(xA + 0.03 + i * pitch);
+  const top = []; for (let i = 0; i < n; i++) top.push(terrainH((postX[i] + postX[i + 1]) / 2, 24.2) + PL);
+  const capProfile = (zb) => { const pts = [], hw = (pY1 - pY0) / 2 + 0.004, yc = (pY0 + pY1) / 2;
+    for (let k = 0; k <= 8; k++) { const a = k / 8 * Math.PI, ca = Math.cos(a), sa = Math.sin(a);
+      pts.push([yc + hw * Math.sign(ca) * Math.pow(Math.abs(ca), 0.55), zb + CAP * Math.pow(sa, 0.55)]); }
+    return pts; };
+  const bolt = (bx, zc) => { const pts = []; for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; pts.push([bx + Math.cos(a) * 0.0075, railY - 0.0012, zc + Math.sin(a) * 0.0075]); }
+    B.poly('zinc', pts, [0, -1, 0], { col: '#a59d87', ext: 1 }); };
+  for (let i = 0; i < n; i++) {
+    // plinth: blocks laid from the coping down, so the courses read right on every step
+    const x0 = i === 0 ? xA : postX[i], x1 = i === n - 1 ? xB : postX[i + 1], zt = top[i], zc = zt - CAP;
+    const zg = Math.min(terrainH(x0, 24.2), terrainH(x1, 24.2)) - 0.25, dv = zc - zg;
+    B.box(x0, x1, pY0, pY1, zg, zc, { mat: 'plinthBlock', ext: 1, f: { zp: null, zn: null },
+      uvf: { yn: [[-x0, dv], [-x1, dv], [-x1, 0], [-x0, 0]], yp: [[x0, dv], [x1, dv], [x1, 0], [x0, 0]] } });
+    B.prismX(capProfile(zc), x0, x1, { mat: 'concrete', col: '#e6e2d8', ext: 1 });
+    B.addCollider(x0, x1, pY0, pY1, zg, zt + HT);
+    // angle rails: upright leg behind the posts, top leg towards us
+    const a = postX[i] + 0.03, b = postX[i + 1] - 0.03, rails = [zt + 0.13, zt + 1.455];
+    for (const zr of rails) { B.box(a, b, railY, railY + 0.006, zr, zr + 0.045, frame); B.box(a, b, railY - 0.03, railY, zr + 0.040, zr + 0.045, frame); }
+    // boards: 10-14 cm wide with 2.5-4.5 cm gaps, uneven tops and bottoms, the odd one a little out of true
+    const list = []; let s = 0;
+    for (;;) { const g = 0.025 + R() * 0.02, w = 0.10 + R() * 0.04; if (s + g + w + 0.03 > b - a) break; list.push([s + g, w]); s += g + w; }
+    const k = (b - a) / (s + 0.03);
+    for (const [o, w] of list) {
+      const xa = a + o * k, xb = xa + w * k, zb0 = zt + 0.02 + R() * 0.05, zb1 = zb0 + (R() - 0.5) * 0.02;
+      const zh = zt + 1.57 + R() * 0.09, lean = R() < 0.3 ? (R() - 0.5) * 0.024 : 0;
+      B.prismY([[xa, zb0], [xb, zb1], [xb + lean, zh + (R() - 0.5) * 0.03], [xa + lean, zh + (R() - 0.5) * 0.03]], bY0, bY1,
+        { mat: 'fenceBoard', col: boardCols[(R() * boardCols.length) | 0], ext: 1 });
+      for (const zr of rails) bolt((xa + xb) / 2, zr + 0.02);
+    }
+  }
+  // posts, bedded in the coping; where the plinth steps they run from the lower step to the higher rail
+  for (let i = 0; i <= n; i++) {
+    const tl = top[Math.max(0, i - 1)], tr = top[Math.min(n - 1, i)], x = postX[i];
+    const zb = Math.min(tl, tr) - CAP - 0.02, zt = Math.max(tl, tr) + 1.50;
+    B.box(x - 0.03, x + 0.03, postY0, postY1, zb, zt, frame);
+    B.box(x - 0.034, x + 0.034, postY0 - 0.004, postY1 + 0.004, zt, zt + 0.006, frame);
+  }
 }
 
 // ---------- Street fence and entrance (from the photos): brick + blue concrete, dark timber gates ----------

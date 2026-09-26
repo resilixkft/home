@@ -334,6 +334,52 @@ TEX.fence = () => {
   x.fillRect(0, 6, W, 6); x.fillRect(0, H - 14, W, 6);
   return { c, u: 1.4, v: 1.25 };
 };
+// side boundary fence: rough-sawn boards, red-brown stain weathered patchy, grey-green lichen, splits and knots
+TEX.fenceBoard = () => {
+  const W = 256, H = 1024, R = rng(331), c = cv(W, H), x = c.getContext('2d');
+  const wrap = (f) => { for (const o of [-W, 0, W]) { x.save(); x.translate(o, 0); f(); x.restore(); } };
+  // soft patch stretched along the grain
+  const patch = (px, py, r, sy, col) => wrap(() => { x.save(); x.translate(px, py); x.scale(1, sy);
+    const g = x.createRadialGradient(0, 0, 0, 0, 0, r); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(-r, -r, 2 * r, 2 * r); x.restore(); });
+  x.fillStyle = '#7c4232'; x.fillRect(0, 0, W, H);
+  // broad colour drift along the grain: redder, browner and sun-bleached streaks
+  for (let k = 0; k < 26; k++) { const xx = R() * W, w = 6 + R() * 40, t = R();
+    x.fillStyle = t < 0.4 ? 'rgba(150,66,44,0.30)' : t < 0.75 ? 'rgba(92,52,38,0.30)' : 'rgba(168,128,108,0.16)'; wrap(() => x.fillRect(xx, 0, w, H)); }
+  // grain
+  for (let k = 0; k < 170; k++) { const xx = R() * W, s = 0.68 + R() * 0.46, lw = 0.5 + R() * 1.6; x.strokeStyle = rgbs(126 * s, 64 * s, 46 * s, 0.45); x.lineWidth = lw;
+    wrap(() => { x.beginPath(); x.moveTo(xx, 0); for (let y = 0; y <= H; y += 32) x.lineTo(xx + Math.sin(y * 0.011 + k) * 2.2, y); x.stroke(); }); }
+  // saw marks across the grain
+  for (let k = 0; k < 60; k++) { const xx = R() * W, y = R() * H; x.strokeStyle = 'rgba(200,158,136,0.12)'; x.lineWidth = 0.8 + R();
+    wrap(() => { x.beginPath(); x.arc(xx, y + 90, 90, -Math.PI / 2 - 0.25, -Math.PI / 2 + 0.25); x.stroke(); }); }
+  // weathering: grey-green lichen film in long patches, denser in places, with fine speckle inside
+  for (let k = 0; k < 90; k++) { const cx = R() * W, cy = R() * H, spread = 20 + R() * 50, m = 3 + (R() * 6 | 0);
+    for (let q = 0; q < m; q++) patch(cx + (R() - 0.5) * spread, cy + (R() - 0.5) * spread * 3, 5 + R() * 16, 2.2 + R() * 3,
+      `rgba(${138 + R() * 30 | 0},${140 + R() * 24 | 0},${112 + R() * 20 | 0},${0.14 + R() * 0.24})`);
+    for (let q = 0; q < 26; q++) { x.fillStyle = `rgba(${150 + R() * 30 | 0},${154 + R() * 26 | 0},${122 + R() * 20 | 0},${0.30 + R() * 0.3})`;
+      const px = cx + (R() - 0.5) * spread * 1.2, py = cy + (R() - 0.5) * spread * 3.4; wrap(() => x.fillRect(px, py, 1 + R() * 2.2, 1 + R() * 2.6)); } }
+  // splits
+  for (let k = 0; k < 6; k++) { const xx = R() * W, y0 = R() * H, len = 90 + R() * 320; x.strokeStyle = 'rgba(40,20,14,0.55)'; x.lineWidth = 0.7 + R();
+    wrap(() => { x.beginPath(); x.moveTo(xx, y0); for (let y = 0; y <= len; y += 24) x.lineTo(xx + Math.sin(y * 0.03 + k) * 1.5, y0 + y); x.stroke(); }); }
+  // a couple of knots
+  for (let k = 0; k < 2; k++) { const xx = R() * W, y = R() * H, rx = 2.5 + R() * 2.5, ry = 4 + R() * 5;
+    wrap(() => { x.fillStyle = 'rgba(140,90,66,0.30)'; x.beginPath(); x.ellipse(xx, y, rx * 1.9, ry * 1.6, 0, 0, 7); x.fill();
+      x.fillStyle = 'rgba(58,30,20,0.7)'; x.beginPath(); x.ellipse(xx, y, rx, ry, 0, 0, 7); x.fill(); }); }
+  noiseLayer(x, W, H, R, 14);
+  return { c, u: 0.48, v: 1.9 };
+};
+// side fence plinth: grey concrete blocks (0.40 x 0.20 m) in stretcher bond, grime and a little algae
+TEX.plinthBlock = () => {
+  const W = 512, H = 256, R = rng(337), c = cv(W, H), x = c.getContext('2d');
+  x.fillStyle = '#7a766c'; x.fillRect(0, 0, W, H);
+  const bw = W / 2, ch = H / 2, j = 3;
+  for (let r = 0; r < 2; r++) { const off = r ? bw / 2 : 0;
+    for (let i = -1; i < 3; i++) { x.fillStyle = rgbs(...jitter([168, 163, 150], 0.04, R)); x.fillRect(i * bw + off + j / 2, r * ch + j / 2, bw - j, ch - j); } }
+  noiseLayer(x, W, H, R, 24);
+  blotches(x, W, H, R, 28, 10, 50, (R) => `rgba(70,68,58,${0.05 + R() * 0.07})`);
+  blotches(x, W, H, R, 14, 6, 24, (R) => `rgba(96,108,70,${0.06 + R() * 0.10})`);
+  for (let k = 0; k < 900; k++) { x.fillStyle = R() < 0.5 ? 'rgba(60,58,52,0.35)' : 'rgba(215,212,204,0.25)'; x.fillRect(R() * W, R() * H, 1 + R() * 2, 1 + R() * 2); }
+  return { c, u: 0.80, v: 0.40 };
+};
 TEX.grate = () => {
   const W = 128, H = 128, c = cv(W, H), x = c.getContext('2d');
   x.clearRect(0, 0, W, H); x.fillStyle = '#2d2e30';
