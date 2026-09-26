@@ -367,6 +367,33 @@ TEX.fenceBoard = () => {
   noiseLayer(x, W, H, R, 14);
   return { c, u: 0.48, v: 1.9 };
 };
+// orange clay roof tiles, courses offset by half a tile (downslope is down the canvas)
+TEX.clayTile = () => {
+  const W = 384, H = 256, R = rng(353), c = cv(W, H), x = c.getContext('2d');
+  x.fillStyle = '#5a2a18'; x.fillRect(0, 0, W, H);
+  const tw = W / 3, th = H / 2;
+  for (let r = 0; r < 2; r++) { const off = r ? tw / 2 : 0;
+    for (let i = -1; i < 4; i++) { const x0 = i * tw + off + 1.5, y0 = r * th, col = jitter([200, 98, 58], 0.08, R);
+      const g = x.createLinearGradient(0, y0, 0, y0 + th); g.addColorStop(0, rgbs(col[0] * 0.84, col[1] * 0.84, col[2] * 0.84)); g.addColorStop(0.85, rgbs(...col)); g.addColorStop(1, rgbs(col[0] * 1.05, col[1] * 1.05, col[2] * 1.05));
+      x.fillStyle = g; x.fillRect(x0, y0, tw - 3, th - 5);
+      x.fillStyle = 'rgba(80,30,15,0.30)'; x.fillRect(x0 + tw * 0.62, y0, 3, th - 8); }
+    x.fillStyle = 'rgba(40,14,6,0.65)'; x.fillRect(0, (r + 1) * th - 5, W, 5); }
+  blotches(x, W, H, R, 16, 10, 40, (R) => `rgba(90,60,40,${0.05 + R() * 0.08})`);
+  noiseLayer(x, W, H, R, 12);
+  return { c, u: 0.90, v: 0.70 };
+};
+// photovoltaic panel (portrait, about 1.0 x 1.7 m) with its cell grid and a light frame
+TEX.solar = () => {
+  const W = 256, H = 420, R = rng(349), c = cv(W, H), x = c.getContext('2d');
+  x.fillStyle = '#b9bec4'; x.fillRect(0, 0, W, H);
+  x.fillStyle = '#1b2433'; x.fillRect(6, 6, W - 12, H - 12);
+  x.strokeStyle = 'rgba(120,138,168,0.35)'; x.lineWidth = 1;
+  for (let i = 1; i < 6; i++) { const xx = 6 + i * (W - 12) / 6; x.beginPath(); x.moveTo(xx, 6); x.lineTo(xx, H - 6); x.stroke(); }
+  for (let j = 1; j < 10; j++) { const yy = 6 + j * (H - 12) / 10; x.beginPath(); x.moveTo(6, yy); x.lineTo(W - 6, yy); x.stroke(); }
+  const g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, 'rgba(90,112,145,0.20)'); g.addColorStop(1, 'rgba(0,0,0,0.12)'); x.fillStyle = g; x.fillRect(6, 6, W - 12, H - 12);
+  noiseLayer(x, W, H, R, 6);
+  return { c, u: 1.04, v: 1.70 };
+};
 // side fence plinth: grey concrete blocks (0.40 x 0.20 m) in stretcher bond, grime and a little algae
 TEX.plinthBlock = () => {
   const W = 512, H = 256, R = rng(337), c = cv(W, H), x = c.getContext('2d');

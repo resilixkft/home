@@ -117,10 +117,113 @@ function buildSite(B) {
       B.box(x, x + 1.1, y1, y1 + 0.02, z, z + 1.3, { mat: 'glassNb', ext: 1 }); B.box(x, x + 1.1, y0 - 0.02, y0, z, z + 1.3, { mat: 'glassNb', ext: 1 }); }
   };
   house(0, 11, 34, 43, 5.2, true); house(-1, 10, -19, -10, 5.6, true, '#efe8da', '#6f3b2c'); house(-34, -25, 4, 13, 5.0, false, '#e3ddd1'); house(-34, -25, 17, 27, 5.4, false, '#f0ebe0', '#5b3a2e');
-  house(30, 40, 2, 12, 5.0, true, '#e6e0d4'); house(31, 41, 16, 26, 5.4, true);
+  house(30, 40, -12, -2, 5.0, true, '#e6e0d4');
+  buildRearHouse(B);
+  B.mirror = false; B.group = 'site'; B.extF = 1;
   // distant tree line
   for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2, r = 46 + (i % 3) * 5, x = 8 + Math.cos(a) * r, y = 12 + Math.sin(a) * r;
     if (x < -22 && x > -60 && Math.abs(y - 12) < 30) continue; (i % 2 ? decid : conifer)(x, y, 9 + (i % 4) * 2, 3 + (i % 3)); }
+}
+
+// ---------- The house behind ours (a draft from the photos) ----------
+// Two storeys of cream render over an orange brick plinth, a hipped clay-tile roof with solar panels and roof
+// windows, brown timber eaves and copper gutters. The garden front has a terrace under a long balcony and bends
+// by about 40 degrees at the end nearest our garden, where a wing faces us square-on 6 m beyond our rear boundary.
+function buildRearHouse(B) {
+  B.mirror = false; B.group = 'site'; B.extF = 1;
+  const Z0 = -1.62, ZB = Z0 - 0.9, EAVE = Z0 + 6.0, PLINTH = Z0 + 0.95, FL1 = Z0 + 3.0;
+  const al = 40 * Math.PI / 180, ca = Math.cos(al), sa = Math.sin(al);
+  const Bx = 32.0, By = 21.5;                      // the bend: our rear boundary is at x = 26
+  const LM = 12, DM = 9.6, LW = 6.2, DW = 8;       // main block front x depth, wing front x depth
+  const uD = [-sa, ca], nM = [-ca, -sa], vD = [ca, sa];
+  const E0 = [Bx - LM * uD[0], By - LM * uD[1]];   // far end of the garden front
+  const F = { main: { o: E0, d: uD, n: nM }, wing: { o: [Bx, By], d: [0, 1], n: [-1, 0] }, east: { o: E0, d: vD, n: [sa, -ca] } };
+  const wallO = { mat: 'render', col: '#fbefdb', ext: 1 }, brickO = { mat: 'brick', ext: 1 };
+  const frameO = { mat: 'oak', col: '#b9895f', ext: 1 }, glassO = { mat: 'glassNb', ext: 1 }, sillO = { mat: 'stoneCap', ext: 1 };
+  const copper = { mat: 'zinc', col: '#a4623c', ext: 1 }, lampO = { mat: 'zinc', col: '#26282a', ext: 1 };
+  // a box standing on a face: s0..s1 along it, z0..z1, off0..off1 out from the wall
+  const onFace = (f, s0, s1, z0, z1, off0, off1, o) => { const sm = (s0 + s1) / 2, om = (off0 + off1) / 2;
+    B.boxR(f.o[0] + f.d[0] * sm + f.n[0] * om, f.o[1] + f.d[1] * sm + f.n[1] * om, z0, s1 - s0, off1 - off0, z1 - z0, Math.atan2(f.d[1], f.d[0]), o); };
+  const win = (f, s, w, z0, h, o = {}) => {
+    onFace(f, s - w / 2, s + w / 2, z0, z0 + h, -0.02, 0.035, frameO);
+    onFace(f, s - w / 2 + 0.07, s + w / 2 - 0.07, z0 + 0.07, z0 + h - 0.07, 0.035, 0.04, glassO);
+    for (const m of (o.mull || [])) onFace(f, s - w / 2 + m * w - 0.035, s - w / 2 + m * w + 0.035, z0 + 0.07, z0 + h - 0.07, 0.035, 0.05, frameO);
+    if (!o.door) onFace(f, s - w / 2 - 0.05, s + w / 2 + 0.05, z0 - 0.05, z0, -0.02, 0.10, sillO);
+    if (o.box) { onFace(f, s - w / 2 + 0.06, s + w / 2 - 0.06, z0 - 0.02, z0 + 0.17, 0.04, 0.24, { mat: 'paint', col: '#b86a45', ext: 1 });
+      onFace(f, s - w / 2 + 0.09, s + w / 2 - 0.09, z0 + 0.17, z0 + 0.34, 0.06, 0.22, { mat: 'foliage', ext: 1 }); }
+  };
+  const lamp = (f, s, z) => onFace(f, s - 0.08, s + 0.08, z, z + 0.30, 0, 0.20, lampO);
+  // masses: render walls, brick plinth
+  const mC = [E0[0] + uD[0] * LM / 2 + vD[0] * DM / 2, E0[1] + uD[1] * LM / 2 + vD[1] * DM / 2], yM = Math.atan2(uD[1], uD[0]);
+  const wC = [Bx + DW / 2, By + LW / 2];
+  B.boxR(mC[0], mC[1], ZB, LM, DM, EAVE - ZB, yM, wallO); B.boxR(wC[0], wC[1], ZB, DW, LW, EAVE - ZB, 0, wallO);
+  B.boxR(mC[0], mC[1], ZB, LM + 0.04, DM + 0.04, PLINTH - ZB, yM, brickO); B.boxR(wC[0], wC[1], ZB, DW + 0.04, LW + 0.04, PLINTH - ZB, 0, brickO);
+  // garden front: plain end bay, then the terrace bays under the balcony (sliding doors with a brick pier between)
+  const M = F.main;
+  const P = (s, off) => [M.o[0] + M.d[0] * s + M.n[0] * off, M.o[1] + M.d[1] * s + M.n[1] * off];
+  const dc = P(6.9, 0.03); B.cylP([dc[0], dc[1], Z0 + 1.75], [dc[0] + M.n[0] * 0.04, dc[1] + M.n[1] * 0.04, Z0 + 1.75], 0.23, 14, { mat: 'paint', col: '#1d2126', ext: 1, caps: true }); // dartboard
+  win(M, 4.7, 2.4, Z0 + 0.12, 2.33, { door: true, mull: [0.5] }); win(M, 8.8, 1.8, Z0 + 0.12, 2.33, { door: true, mull: [0.5] });
+  onFace(M, 5.9, 7.9, ZB, FL1 - 0.2, -0.02, 0.03, brickO);
+  win(M, 4.8, 2.2, FL1, 2.3, { door: true, mull: [1 / 3, 2 / 3] }); win(M, 8.75, 1.7, FL1, 2.3, { door: true, mull: [0.5] }); win(M, 10.9, 1.0, FL1 + 0.9, 1.4);
+  lamp(M, 1.2, Z0 + 2.2); lamp(M, 3.3, Z0 + 2.2); lamp(M, 6.9, FL1 + 2.0);
+  // balcony: cream slab, dark railing
+  onFace(M, 3.2, LM, FL1 - 0.2, FL1, 0, 1.3, wallO);
+  const rail = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]), nn = [-(b[1] - a[1]) / L, (b[0] - a[0]) / L, 0];
+    B.poly('fence', [[a[0], a[1], FL1], [b[0], b[1], FL1], [b[0], b[1], FL1 + 1.0], [a[0], a[1], FL1 + 1.0]], nn, { ext: 1, uvs: [[0, 1.25], [L, 1.25], [L, 0], [0, 0]] }); };
+  rail(P(3.25, 1.25), P(LM - 0.05, 1.25)); rail(P(3.25, 0), P(3.25, 1.25)); rail(P(LM - 0.05, 0), P(LM - 0.05, 1.25));
+  // terrace paving and a table with chairs
+  onFace(M, 2.8, 12.6, Z0 - 0.5, Z0 + 0.12, 0, 4.0, { mat: 'balconyTile', col: '#efe3cf', ext: 1 });
+  const wood = { mat: 'oak', col: '#7a4b30', ext: 1 };
+  onFace(M, 9.6, 11.4, Z0 + 0.84, Z0 + 0.88, 1.9, 2.8, { mat: 'fabric', col: '#e9d6d6', ext: 1 }); onFace(M, 10.4, 10.6, Z0 + 0.12, Z0 + 0.84, 2.25, 2.45, wood);
+  for (const s of [9.9, 10.5, 11.1]) for (const off of [1.45, 3.25]) { onFace(M, s - 0.22, s + 0.22, Z0 + 0.12, Z0 + 0.58, off - 0.2, off + 0.2, wood);
+    const bo = off < 2 ? off - 0.2 : off + 0.12; onFace(M, s - 0.22, s + 0.22, Z0 + 0.58, Z0 + 1.05, bo, bo + 0.08, wood); }
+  onFace(M, 4.0, 5.6, Z0 + 0.12, Z0 + 0.55, 1.0, 1.55, wood); onFace(M, 4.0, 5.6, Z0 + 0.55, Z0 + 0.95, 0.95, 1.05, wood);
+  // the wing facing our garden: two windows up, two with flower boxes down
+  const W = F.wing;
+  for (const s of [1.9, 3.4]) { win(W, s, 1.0, FL1 + 0.9, 1.4); win(W, s, 1.0, PLINTH, 1.5, { box: true }); }
+  lamp(W, 5.3, Z0 + 2.3);
+  // the far end wall: three windows on each floor, flower boxes on the front two
+  const E = F.east;
+  for (const [s, bx] of [[2.5, true], [4.8, true], [7.3, false]]) { win(E, s, 0.9, FL1 + 0.9, 1.4); win(E, s, 0.9, PLINTH, 1.5, { box: bx }); }
+  lamp(E, 1.0, Z0 + 2.2);
+  // a few windows on the back walls for the view from above
+  const back = { o: [E0[0] + vD[0] * DM, E0[1] + vD[1] * DM], d: uD, n: vD };
+  for (const s of [2.2, 5.0, 7.8]) { win(back, s, 1.0, FL1 + 0.9, 1.4); win(back, s, 1.0, PLINTH, 1.5); }
+  const north = { o: [Bx, By + LW], d: [1, 0], n: [0, 1] };
+  for (const s of [2.0, 4.6]) { win(north, s, 0.9, FL1 + 0.9, 1.4); win(north, s, 0.9, PLINTH, 1.5); }
+  // downpipes
+  const pipe = (x, y) => B.cylZ(x, y, ZB, EAVE, 0.05, 8, copper);
+  const q = P(3.0, 0.08); pipe(q[0], q[1]); pipe(Bx - 0.08, By + 0.08); pipe(Bx - 0.08, By + LW - 0.08);
+  pipe(E0[0] + vD[0] * (DM - 0.1) + sa * 0.08, E0[1] + vD[1] * (DM - 0.1) - ca * 0.08);
+  // hipped roofs over the main block and the wing (their overlap makes the valley), timber soffits, copper gutters
+  const pitch = Math.tan(38 * Math.PI / 180), OV = 0.8, roofO = { mat: 'clayRoof', col: '#f2d2c0', ext: 1 }, soffitO = { mat: 'oak', col: '#a8744a', ext: 1 };
+  // hip roof over a rectangle (L along yaw, W across) with per-side overhangs; gutters on the sides not listed in skip
+  const hip = (cx, cy, yaw, L, W, dz, ov = {}, skip = []) => {
+    const o = (k) => (k in ov ? ov[k] : OV), c = Math.cos(yaw), s = Math.sin(yaw);
+    const am = (o('a1') - o('a0')) / 2, bm = (o('b1') - o('b0')) / 2;
+    L += o('a0') + o('a1'); W += o('b0') + o('b1');
+    const H = W / 2 * pitch, r = (L - W) / 2, z = EAVE, zr = EAVE + H;
+    const Q = (a, b, zz) => [cx + (a + am) * c - (b + bm) * s, cy + (a + am) * s + (b + bm) * c, zz];
+    const up = (p0, p1, p2) => { const u = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]], v = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
+      let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; const l = Math.hypot(...n); n = n.map(t => t / l); return n[2] < 0 ? n.map(t => -t) : n; };
+    for (const f of [[Q(-L / 2, -W / 2, z), Q(L / 2, -W / 2, z), Q(r, 0, zr), Q(-r, 0, zr)], [Q(L / 2, W / 2, z), Q(-L / 2, W / 2, z), Q(-r, 0, zr), Q(r, 0, zr)],
+      [Q(-L / 2, W / 2, z), Q(-L / 2, -W / 2, z), Q(-r, 0, zr)], [Q(L / 2, -W / 2, z), Q(L / 2, W / 2, z), Q(r, 0, zr)]]) B.poly(roofO.mat, f, up(f[0], f[1], f[2]), roofO);
+    B.poly(soffitO.mat, [Q(-L / 2, -W / 2, z - dz), Q(L / 2, -W / 2, z - dz), Q(L / 2, W / 2, z - dz), Q(-L / 2, W / 2, z - dz)], [0, 0, -1], soffitO);
+    for (const [k, a, b, len, yy] of [['b0', 0, -W / 2, L, yaw], ['b1', 0, W / 2, L, yaw], ['a0', -L / 2, 0, W, yaw + Math.PI / 2], ['a1', L / 2, 0, W, yaw + Math.PI / 2]]) {
+      if (skip.includes(k)) continue; const p = Q(a, b, 0); B.boxR(p[0], p[1], z - 0.13 - dz, len + 0.1, 0.12, 0.15, yy, copper); }
+    return { Q, H, L, W };
+  };
+  // at the bend the two eaves meet in one point in front of the corner: shorten the overhangs on the shared ends to match
+  const ovBend = (OV - OV * ca) / sa;
+  const RM = hip(mC[0], mC[1], yM, LM, DM, 0, { a1: ovBend }, ['a1']); hip(wC[0], wC[1], 0, DW, LW, 0.02, { b0: ovBend }, ['b0']);
+  // solar panels and roof windows on the garden-facing slope of the main roof (its +b side faces the garden)
+  const slope = (a, t, lift) => { const p = RM.Q(a, RM.W / 2 * (1 - t), EAVE + RM.H * t), k = lift / Math.hypot(1, pitch);
+    return [p[0] + nM[0] * k * pitch, p[1] + nM[1] * k * pitch, p[2] + k]; };
+  const slopeN = [nM[0] * pitch / Math.hypot(1, pitch), nM[1] * pitch / Math.hypot(1, pitch), 1 / Math.hypot(1, pitch)];
+  for (const [t0, t1, a0, a1] of [[0.10, 0.33, -4.5, 4.4], [0.35, 0.58, -3.1, 3.0], [0.60, 0.83, -1.7, 1.6]]) {
+    B.poly('solar', [slope(a0, t0, 0.05), slope(a1, t0, 0.05), slope(a1, t1, 0.05), slope(a0, t1, 0.05)], slopeN, { ext: 1, uvs: [[a0, 1.7], [a1, 1.7], [a1, 0], [a0, 0]] }); }
+  for (const [a, t] of [[-2.5, 0.465], [-0.2, 0.465], [2.1, 0.465], [-0.9, 0.715], [3.7, 0.22]])
+    B.poly('metal', [slope(a - 0.39, t - 0.08, 0.08), slope(a + 0.39, t - 0.08, 0.08), slope(a + 0.39, t + 0.08, 0.08), slope(a - 0.39, t + 0.08, 0.08)], slopeN, { col: '#9fa9b2', ext: 1 });
 }
 
 // ---------- Side boundary fence (from the photos) ----------
