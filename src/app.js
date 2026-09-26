@@ -495,7 +495,7 @@ setTimeout(function () {
     $('gunBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
     document.body.dataset.gun = on ? 'on' : 'off';
     try { localStorage.setItem('kh-blaster', on ? '1' : '0'); } catch (e) {}
-    if (!quiet && on) showToast(mode === 'walk' ? 'Blaster on: left click to fire, R to reload, G to put it away' : 'The blaster appears when you walk');
+    if (!quiet && on) showToast(mode === 'walk' ? 'Blaster on: F to fire, R to reload, G to put it away' : 'The blaster appears when you walk');
   }
 
   // ---- input ----
@@ -503,13 +503,12 @@ setTimeout(function () {
   const touchMove = { f: 0, s: 0 };
   document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; $('lockHint').hidden = locked || mode !== 'walk'; });
   canvas.addEventListener('click', () => { if (mode === 'walk' && !locked && matchMedia('(pointer: fine)').matches) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} } });
-  // left mouse button fires the blaster (captured mouse or not); with the mouse free, dragging still looks around,
-  // and a right-button drag looks without firing
+  // the mouse only looks: captured, moving it looks; free, a left-button drag looks. The blaster fires with F.
   document.addEventListener('pointerlockerror', () => { $('lockHint').textContent = 'Drag the view to look around'; });
-  canvas.addEventListener('contextmenu', (e) => { if (mode === 'walk') e.preventDefault(); });
-  canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; try { canvas.setPointerCapture(e.pointerId); } catch (err) {} if (e.pointerType === 'touch' && mode === 'walk') touchStart(e);
-    if (e.pointerType === 'mouse' && e.button === 0 && mode === 'walk' && blaster.active) blaster.trigger(true); });
-  canvas.addEventListener('pointerup', (e) => { dragging = false; touchMove.f = 0; touchMove.s = 0; if (e.button === 0) blaster.trigger(false); });
+  canvas.addEventListener('contextmenu', (e) => { if (mode === 'walk') e.preventDefault(); }); // a stray right-click shouldn't release the mouse
+  canvas.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button !== 0) return;
+    dragging = true; lastX = e.clientX; lastY = e.clientY; try { canvas.setPointerCapture(e.pointerId); } catch (err) {} if (e.pointerType === 'touch' && mode === 'walk') touchStart(e); });
+  canvas.addEventListener('pointerup', (e) => { dragging = false; touchMove.f = 0; touchMove.s = 0; });
   canvas.addEventListener('pointermove', (e) => {
     if (locked) { look(e.movementX, e.movementY); return; }
     if (!dragging) return;
@@ -531,11 +530,12 @@ setTimeout(function () {
     if (e.code === 'KeyG' && !e.repeat) setBlaster(!blaster.enabled);
     if (e.code === 'KeyV' && !e.repeat) setWide(!wideView, true);
     if (e.code === 'KeyR' && blaster.active) blaster.reload();
+    if (e.code === 'KeyF' && !e.repeat && mode === 'walk' && blaster.active) blaster.trigger(true);
     if (e.code === 'KeyM') { $('mapWrap').hidden = !$('mapWrap').hidden; }
     if (e.code === 'KeyO') setMode(mode === 'overview' ? 'walk' : 'overview');
     if (e.code === 'KeyH') $('help').hidden = !$('help').hidden;
   });
-  window.addEventListener('keyup', (e) => { keys.delete(e.code); });
+  window.addEventListener('keyup', (e) => { keys.delete(e.code); if (e.code === 'KeyF') blaster.trigger(false); });
   window.addEventListener('blur', () => { keys.clear(); blaster.trigger(false); });
 
   // ---- UI wiring ----

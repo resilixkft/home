@@ -15,7 +15,7 @@ Open `index.html` in a current version of Safari, Chrome or Firefox. If GitHub P
 | E | Use what you look at: doors, wardrobes, drawers, windows (tilt), curtains, chairs, beds, the bunk-bed ladder, the fireplace door |
 | C | Crouch |
 | V | Natural or wide field of view |
-| G | Foam-dart blaster on or off; left click fires, R reloads |
+| G | Foam-dart blaster on or off; F fires (hold to keep firing), R reloads |
 | M | Floor plan (click it to jump) |
 | O | View from above |
 | H | Settings and controls |
