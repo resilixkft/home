@@ -30,6 +30,7 @@ setTimeout(function () {
     curtain: M('curtain', { transparent: true, cull: false, castShadow: false, alpha: 0.85 }),
     bamboo: M('bamboo', { transparent: true, cull: false, alpha: 0.95 }), poly: M('white', { tint: [0.85, 0.88, 0.85], alpha: 0.28, transparent: true, cull: false, spec: 0.8, shin: 80, castShadow: false }),
     fence: M('fence', { cull: false, alphaTest: 0.5 }), fenceBoard: M('fenceBoard', { spec: 0.05, shin: 10 }), plinthBlock: M('plinthBlock', { spec: 0.04 }),
+    euroMesh: M('euroMesh', { spec: 0.35, shin: 30, transparent: true, cull: false, alphaTest: 0.02, castShadow: false }),
     clayRoof: M('clayTile', { spec: 0.10, shin: 18 }), solar: M('solar', { spec: 0.9, shin: 90, refl: 0.3 }),
     blueConcrete: M('concrete', { tint: [0.60, 0.72, 1.22] }), coping: M('concrete', { tint: [0.92, 0.94, 0.95] }), stoneCap: M('concrete', { tint: [1.85, 1.75, 1.55] }),
     slatWood: M('woodDark', { tint: [0.30, 0.27, 0.26], spec: 0.08, shin: 14 }), plate: M('plate', { spec: 0.7, shin: 60, refl: 0.2 }), grate: M('grate', { cull: false, alphaTest: 0.5 }),

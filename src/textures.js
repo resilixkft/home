@@ -394,6 +394,20 @@ TEX.solar = () => {
   noiseLayer(x, W, H, R, 6);
   return { c, u: 1.04, v: 1.70 };
 };
+// green welded-mesh ("Euro") fence panel: 5 cm vertical wires with spiky tops, horizontal wires about every 20 cm.
+// One tile is 0.5 m wide and exactly one panel (1.53 m) high; the colour sits under the clear texels too.
+TEX.euroMesh = () => {
+  const W = 256, H = 512, c = cv(W, H), x = c.getContext('2d'), PH = 1.53, row = (h) => (PH - h) / PH * H;
+  x.clearRect(0, 0, W, H); x.fillStyle = '#fff';
+  for (let i = 0; i < 10; i++) x.fillRect(12.8 + i * 25.6 - 1.3, 0, 2.6, H);                    // vertical wires, 0.03 m spikes on top
+  for (const h of [0.03, 0.23, 0.43, 0.63, 0.83, 1.03, 1.23, 1.43, 1.50]) x.fillRect(0, row(h) - 1.1, W, 2.2);
+  const a = x.getImageData(0, 0, W, H).data, data = new Uint8Array(W * H * 4);
+  for (let p = 0; p < W * H; p++) {
+    const k = 0.9 + 0.2 * (((p * 2654435761) >>> 24) / 255);                                   // a touch of powder-coat grain
+    data[p * 4] = 34 * k; data[p * 4 + 1] = 90 * k; data[p * 4 + 2] = 58 * k; data[p * 4 + 3] = a[p * 4 + 3];
+  }
+  return { c: { data, width: W, height: H }, u: 0.5, v: PH };
+};
 // side fence plinth: grey concrete blocks (0.40 x 0.20 m) in stretcher bond, grime and a little algae
 TEX.plinthBlock = () => {
   const W = 512, H = 256, R = rng(337), c = cv(W, H), x = c.getContext('2d');

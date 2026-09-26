@@ -50,11 +50,13 @@ function buildSite(B) {
   // our outer side boundary (on the right coming in through the gate): timber fence on a concrete plinth
   buildSideFence(B);
   B.mirror = false; B.group = 'site'; B.extF = 1;
-  // side & rear boundary hedges (thuja)
+  // side boundary hedge of the other half (thuja)
   B.box(-11.2, 26.0, MIRROR_Y - 24.75, MIRROR_Y - 24.05, -1.5, 1.85, { mat: 'foliage', ext: 1, collide: true });
-  B.box(25.8, 26.6, -0.8, 24.75, -1.8, 1.4, { mat: 'foliage', ext: 1, collide: true });
-  // timber fence between the two back gardens
-  B.box(11.82, 25.8, 11.95, 12.03, -1.6, 0.55, { mat: 'woodClad', ext: 1, collide: true });
+  // rear boundary with Csaba's house: green welded-mesh fence along the full width of both back gardens
+  buildRearFence(B);
+  B.mirror = false; B.group = 'site'; B.extF = 1;
+  // timber fence between the two back gardens, up to the rear fence
+  B.box(11.82, 26.16, 11.95, 12.03, -1.6, 0.55, { mat: 'woodClad', ext: 1, collide: true });
   // privacy wall between the two rear terraces (shared)
   B.box(8.86, 11.82, 11.77, 12.21, -0.70, 2.52, { mat: 'woodClad', ext: 1, collide: true });
   // strip between the ramps
@@ -280,6 +282,49 @@ function buildSideFence(B) {
     B.box(x - 0.03, x + 0.03, postY0, postY1, zb, zt, frame);
     B.box(x - 0.034, x + 0.034, postY0 - 0.004, postY1 + 0.004, zt, zt + 0.006, frame);
   }
+  // short end bay from the last post to the rear boundary fence (its own random draws, so the bays above stay as they are)
+  const xE = 26.16, zt = top[n - 1], a = postX[n] + 0.03, R2 = rng(4243);
+  if (xE > xB + 0.05) {
+    const zc = zt - CAP, zg = terrainH(xE, 24.2) - 0.25, dv = zc - zg;
+    B.box(xB, xE, pY0, pY1, zg, zc, { mat: 'plinthBlock', ext: 1, f: { zp: null, zn: null },
+      uvf: { yn: [[-xB, dv], [-xE, dv], [-xE, 0], [-xB, 0]], yp: [[xB, dv], [xE, dv], [xE, 0], [xB, 0]] } });
+    B.prismX(capProfile(zc), xB, xE, { mat: 'concrete', col: '#e6e2d8', ext: 1 });
+    B.addCollider(xB, xE, pY0, pY1, zg, zt + HT);
+    const rails = [zt + 0.13, zt + 1.455];
+    for (const zr of rails) { B.box(a, xE, railY, railY + 0.006, zr, zr + 0.045, frame); B.box(a, xE, railY - 0.03, railY, zr + 0.040, zr + 0.045, frame); }
+    let xa = a + 0.03;
+    while (xa + 0.10 < xE - 0.02) {
+      const xb = Math.min(xa + 0.10 + R2() * 0.03, xE - 0.02), zb0 = zt + 0.02 + R2() * 0.05;
+      B.prismY([[xa, zb0], [xb, zb0], [xb, cutZ(xb)], [xa, cutZ(xa)]], bY0, bY1, { mat: 'fenceBoard', col: boardCols[(R2() * boardCols.length) | 0], ext: 1 });
+      for (const zr of rails) bolt((xa + xb) / 2, zr + 0.02);
+      xa = xb + 0.03 + R2() * 0.015;
+    }
+  }
+}
+
+// ---------- Rear boundary: green welded-mesh ("Euro") panel fence ----------
+// 2.5 m panels, 1.53 m high with two V-bends, on 60 x 40 mm green posts with black caps. It runs the full width
+// of both back gardens, from the other half's side hedge to our timber side fence, and can be seen through.
+function buildRearFence(B) {
+  B.mirror = false; B.group = 'site'; B.extF = 1;
+  const X = 26.2, y0 = MIRROR_Y - 24.4, y1 = 24.2, PH = 1.53, gap = 0.05, bends = [0.38, 1.08], bh = 0.05, bd = 0.035;
+  const zg = terrainH(X, 12), green = { mat: 'paint', col: '#1f5a3a', ext: 1 }, cap = { mat: 'paint', col: '#1b1d1e', ext: 1 };
+  const n = Math.max(1, Math.round((y1 - y0) / 2.5)), pitch = (y1 - y0) / n;
+  // one panel between two post faces: straight runs plus the two V-bends pushed out towards Csaba's side
+  const panel = (ya, yb) => {
+    const q = (h0, h1, d0, d1) => B.poly('euroMesh', [[X + d0, ya, zg + gap + h0], [X + d0, yb, zg + gap + h0], [X + d1, yb, zg + gap + h1], [X + d1, ya, zg + gap + h1]],
+      [1, 0, 0], { ext: 1, uvs: [[ya, PH - h0], [yb, PH - h0], [yb, PH - h1], [ya, PH - h1]] });
+    let h = 0;
+    for (const b of bends) { q(h, b - bh, 0, 0); q(b - bh, b, 0, bd); q(b, b + bh, bd, 0); h = b + bh; }
+    q(h, PH, 0, 0);
+  };
+  for (let i = 0; i <= n; i++) {
+    const y = y0 + i * pitch;
+    B.box(X - 0.02, X + 0.02, y - 0.03, y + 0.03, zg - 0.4, zg + gap + PH + 0.03, green);
+    B.box(X - 0.025, X + 0.025, y - 0.035, y + 0.035, zg + gap + PH + 0.03, zg + gap + PH + 0.05, cap);
+    if (i < n) panel(y + 0.03, y + pitch - 0.03);
+  }
+  B.addCollider(X - 0.06, X + 0.06, y0 - 0.03, y1 + 0.03, zg - 0.4, zg + gap + PH + 0.05);
 }
 
 // ---------- Street fence and entrance (from the photos): brick + blue concrete, dark timber gates ----------
