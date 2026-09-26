@@ -1,0 +1,16 @@
+# local build output and test tooling
+dist/
+shots/
+klinker-house.html
+node_modules/
+package.json
+*.log
+dbg.js
+fuzz.js
+gun.js
+photo.js
+probe.js
+shot.js
+ui.js
+views.js
+walk.js

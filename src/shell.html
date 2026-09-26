@@ -1,0 +1,174 @@
+<title>Kont26 House</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --panel: rgba(24, 28, 31, 0.82);
+    --panel-solid: #181c1f;
+    --ink: #eef0ec;
+    --muted: #a7aeab;
+    --line: rgba(255, 255, 255, 0.13);
+    --accent: #5b7cf2;
+    --accent-ink: #ffffff;
+    --brick: #b8704f;
+    --display: "Barlow Semi Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+    --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: #11151a; color: var(--ink); font-family: var(--body); font-size: 15px; overflow: hidden; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+  button { font: 600 14px/1 var(--display); letter-spacing: 0.02em; color: var(--ink); background: rgba(255,255,255,0.07); border: 1px solid var(--line); border-radius: 4px; padding: 9px 12px; cursor: pointer; }
+  button:hover { background: rgba(255,255,255,0.14); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+
+  /* boot + intro */
+  #boot, #nogl { position: fixed; inset: 0; display: grid; place-items: center; font: 600 18px var(--display); color: var(--muted); }
+  #intro { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(440px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow-y: auto; box-sizing: border-box; padding: 22px 22px 18px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  #intro h1 { margin: 0; font: 700 clamp(34px, 6vw, 52px)/0.92 var(--display); letter-spacing: -0.01em; text-wrap: balance; }
+  #intro h1 small { display: block; margin-top: 8px; font: 500 15px/1.35 var(--body); color: var(--muted); letter-spacing: 0; max-width: 46ch; }
+  .datum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; font: 600 13px var(--display); color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+  .datum b { color: var(--ink); font-variant-numeric: tabular-nums; font-size: 15px; margin-left: 4px; }
+  .datum .dp { white-space: nowrap; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); padding: 12px 16px; font-size: 15px; }
+  .primary:hover { background: #6d8bf6; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: transparent; padding: 8px 11px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent); }
+  .lbl { font: 600 13px var(--display); color: var(--muted); margin-right: 4px; }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 14px; color: var(--muted); margin: 0; }
+  .keys dt { font: 600 13px var(--display); color: var(--ink); white-space: nowrap; }
+  .keys dd { margin: 0; min-width: 0; }
+  kbd { display: inline-block; min-width: 1.4em; text-align: center; padding: 2px 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; font: 600 12px var(--display); color: var(--ink); background: rgba(255,255,255,0.05); }
+  .note { font-size: 13px; color: var(--muted); line-height: 1.4; margin: 0; }
+
+  /* HUD */
+  #where { position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: 16px; padding: 10px 14px 11px; min-width: 190px; pointer-events: none; }
+  #roomName { font: 700 24px/1 var(--display); }
+  #roomArea { font: 600 14px var(--display); color: var(--muted); margin-left: 8px; font-variant-numeric: tabular-nums; }
+  #levelLine { margin-top: 5px; font: 600 13px var(--display); color: var(--muted); display: flex; gap: 8px; }
+  #levelZ { color: #9fb2ff; font-variant-numeric: tabular-nums; }
+  #goto { position: fixed; left: 16px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; max-width: calc(100% - 32px); }
+  #tools { position: fixed; right: 16px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
+  #mapWrap { position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); right: 16px; padding: 6px; }
+  #map { width: 200px; height: 200px; display: block; border-radius: 3px; cursor: crosshair; }
+  #mapCap { font: 600 12px var(--display); color: var(--muted); padding: 5px 2px 1px; display: flex; justify-content: space-between; }
+  #cross { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,0.75); box-shadow: 0 0 0 1px rgba(0,0,0,0.35); pointer-events: none; }
+  body[data-mode="overview"] #cross { display: none; }
+  /* foam-dart blaster */
+  body[data-gun="on"][data-mode="walk"] #cross { width: 18px; height: 18px; margin: -9px 0 0 -9px; background: transparent; border: 2px solid rgba(255,255,255,0.85); box-shadow: 0 0 0 1px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.25); }
+  body[data-gun="on"][data-mode="walk"] #cross::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; border-radius: 50%; background: #ff8a2a; }
+  #ammo { position: fixed; left: 16px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); padding: 8px 12px; display: none; align-items: baseline; gap: 6px; font: 700 22px/1 var(--display); font-variant-numeric: tabular-nums; pointer-events: none; }
+  #ammo small { font: 600 13px var(--display); color: var(--muted); }
+  #ammo.low #ammoN { color: #ff9a4a; }
+  #ammo #ammoSpare { margin-left: 6px; padding-left: 8px; border-left: 1px solid var(--line); }
+  #ammo.pick { animation: pick 0.5s ease-out; }
+  @keyframes pick { 0% { box-shadow: 0 0 0 0 rgba(255,138,42,0.9); } 100% { box-shadow: 0 0 0 10px rgba(255,138,42,0); } }
+  body[data-gun="on"][data-mode="walk"] #ammo { display: flex; }
+  #touchGun { position: fixed; right: 20px; bottom: calc(140px + env(safe-area-inset-bottom, 0px)); display: none; flex-direction: column; gap: 10px; align-items: center; }
+  #fireBtn { width: 76px; height: 76px; border-radius: 50%; background: rgba(255,122,26,0.88); border-color: rgba(255,255,255,0.4); color: #1b1d20; font-size: 15px; touch-action: none; }
+  #reloadBtn { border-radius: 20px; }
+  @media (pointer: coarse) { body[data-gun="on"][data-mode="walk"] #touchGun { display: flex; } }
+  #doorHint { position: fixed; left: 50%; top: calc(50% + 28px); transform: translateX(-50%); padding: 8px 12px; display: flex; gap: 8px; align-items: center; font: 600 14px var(--display); }
+  #lockHint { position: fixed; left: 50%; top: calc(50% - 64px); transform: translateX(-50%); padding: 8px 12px; font: 600 14px var(--display); color: var(--ink); pointer-events: none; }
+  #cutbar { position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 32px); }
+  #help { position: fixed; right: 16px; bottom: 74px; width: min(380px, calc(100% - 32px)); max-height: calc(100vh - 110px); overflow-y: auto; padding: 16px; display: grid; gap: 12px; }
+  #help h2 { margin: 0; font: 700 20px var(--display); }
+  #help h2 + h2, #help .setrow + h2 { margin-top: 6px; }
+  .setrow { display: flex; align-items: center; gap: 10px; }
+  .setrow .lbl { min-width: 76px; }
+  .setrow input[type=range] { flex: 1; accent-color: var(--accent); }
+  #toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); padding: 9px 14px; font: 600 14px var(--display); }
+  .bright { display: inline-flex; align-items: center; gap: 6px; }
+  .bright input { width: 96px; accent-color: var(--accent); }
+  #fps { font: 600 12px var(--display); color: var(--muted); min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+  /* the Go to bar and the tool bar share the bottom edge on wide screens; on narrower ones Go to sits one row up */
+  @media (max-width: 1260px) {
+    #goto { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+    #ammo { bottom: calc(128px + env(safe-area-inset-bottom, 0px)); }
+    #toast { bottom: 128px; }
+    #help { bottom: 128px; max-height: calc(100vh - 160px); }
+  }
+  @media (max-width: 720px) {
+    #mapWrap { top: auto; bottom: 120px; }
+    #map { width: 140px; height: 140px; }
+    #where { min-width: 0; }
+    #roomName { font-size: 20px; }
+    #cutbar { top: 92px; }
+  }
+</style>
+<canvas id="gl" tabindex="0" aria-label="3D view of the house"></canvas>
+<div id="boot">Building the house…</div>
+<div id="nogl" hidden><div class="panel" style="padding:20px;max-width:420px">This browser can't show the 3D model because WebGL 2 is turned off or unavailable. Open the page in a current version of Safari, Chrome or Firefox.</div></div>
+
+<section id="intro" class="panel" hidden aria-labelledby="introTitle">
+  <h1 id="introTitle">Klinker House<small>Your half of the semi-detached pair, modelled from the architect's plans and your photos. Walk every room on all three levels, the terraces and the garden.</small></h1>
+  <div class="datum"><span class="dp">Ground floor <b>±0.00 = 260.15 m</b></span><span class="dp">Ridge <b>+7.88</b></span><span class="dp">Basement <b>−2.59</b></span></div>
+  <div class="row">
+    <button class="primary" id="startBtn">Walk in from the street</button>
+    <button id="overBtn">View from above</button>
+  </div>
+  <div class="row"><span class="lbl">Quality</span>
+    <div class="seg" role="group" aria-label="Rendering quality">
+      <button data-q="smooth" aria-pressed="false">Smooth</button><button data-q="balanced" aria-pressed="true">Balanced</button><button data-q="sharp" aria-pressed="false">Sharp</button>
+    </div>
+  </div>
+  <dl class="keys">
+    <dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>Walk (arrow keys work too)</dd>
+    <dt>Mouse</dt><dd>Look around. Click the view first to capture the mouse</dd>
+    <dt><kbd>Shift</kbd></dt><dd>Walk faster</dd>
+    <dt><kbd>E</kbd></dt><dd>Use what you look at: doors, wardrobes, windows, curtains, seats, beds</dd>
+    <dt><kbd>C</kbd></dt><dd>Crouch</dd>
+    <dt><kbd>M</kbd> <kbd>O</kbd> <kbd>Esc</kbd></dt><dd>Map, view from above, release the mouse</dd>
+  </dl>
+  <p class="note">Balanced suits a 2015 MacBook Pro. If movement gets choppy the page switches to Smooth by itself.</p>
+</section>
+
+<div id="hud" hidden>
+  <div id="where" class="panel"><div><span id="roomName">Street</span><span id="roomArea"></span></div><div id="levelLine"><span id="levelName">Outside</span><span id="levelZ"></span></div></div>
+  <div id="mapWrap" class="panel"><canvas id="map" width="200" height="200" aria-label="Floor plan map. Click a spot to jump there."></canvas><div id="mapCap"><span>Plan</span><span>Click to jump</span></div></div>
+  <div id="cross"></div>
+  <div id="lockHint" class="panel" hidden>Click the view to look around with the mouse</div>
+  <button id="doorHint" class="panel" hidden><kbd>E</kbd><span id="doorHintText">Open door</span></button>
+  <div id="cutbar" class="panel" hidden><span class="lbl">Show</span>
+    <button data-cut="all" aria-pressed="true">Whole house</button><button data-cut="upper" aria-pressed="false">Upper floor</button><button data-cut="ground" aria-pressed="false">Ground floor</button><button data-cut="basement" aria-pressed="false">Basement</button>
+  </div>
+  <nav id="goto" class="panel" aria-label="Go to"><span class="lbl">Go to</span>
+    <button data-go="street">Street</button><button data-go="ground">Ground floor</button><button data-go="upper">Upper floor</button><button data-go="basement">Basement</button><button data-go="garden">Garden</button>
+  </nav>
+  <div id="tools" class="panel">
+    <span id="fps"></span>
+    <button id="childBtn" aria-pressed="false" title="See the house from a child's eye height (1.20 m)">Child view</button><button id="wideBtn" aria-pressed="false" title="Wider field of view (V)">Wide view</button><button id="soundBtn" aria-pressed="true" title="Footsteps and other sounds">Sound</button><button id="gunBtn" aria-pressed="false" title="Foam-dart blaster on or off (G)">Blaster</button><button id="mapBtn">Map</button><button id="modeBtn">Overview</button><button id="helpBtn" title="Brightness, quality and controls">Settings</button>
+  </div>
+  <section id="help" class="panel" hidden aria-labelledby="helpTitle">
+    <h2 id="helpTitle">Settings</h2>
+    <div class="setrow"><span class="lbl">Brightness</span><input id="bright" type="range" min="0.6" max="1.3" step="0.05" value="1" aria-label="Brightness"></div>
+    <div class="setrow"><span class="lbl">Quality</span><div class="seg" role="group" aria-label="Rendering quality"><button data-q="smooth" aria-pressed="false">Smooth</button><button data-q="balanced" aria-pressed="true">Balanced</button><button data-q="sharp" aria-pressed="false">Sharp</button></div></div>
+    <h2>Controls</h2>
+    <dl class="keys">
+      <dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>Walk. Arrow keys walk and turn</dd>
+      <dt>Mouse</dt><dd>Look. Click the view to capture the mouse, <kbd>Esc</kbd> releases it</dd>
+      <dt>Drag</dt><dd>Look without capturing the mouse (right-button drag when the blaster is on)</dd>
+      <dt><kbd>Shift</kbd></dt><dd>Walk faster (a brisk jog)</dd>
+      <dt><kbd>V</kbd></dt><dd>Natural or wide field of view (the Wide view button)</dd>
+      <dt><kbd>E</kbd></dt><dd>Use what you look at: doors, wardrobes, drawers, boxes, windows (tilt), curtains, chairs and sofas (sit), beds (lie down), the bunk-bed ladder. <kbd>E</kbd> again to stand up</dd>
+      <dt><kbd>C</kbd></dt><dd>Crouch or stand up, for example to peek under the bunk bed</dd>
+      <dt><kbd>M</kbd></dt><dd>Show or hide the plan. Click the plan to jump to a spot</dd>
+      <dt><kbd>O</kbd></dt><dd>View from above. Drag to orbit, scroll to zoom, and peel off floors with Show</dd>
+      <dt><kbd>G</kbd></dt><dd>Foam-dart blaster on or off (the Blaster button). It shows while you walk</dd>
+      <dt>Left click</dt><dd>Fire a dart (hold to keep firing)</dd>
+      <dt><kbd>R</kbd></dt><dd>Reload the 12-dart magazine from your spare darts. Walk over darts on the floor to pick them up</dd>
+    </dl>
+    <p class="note">Stairs work like the real ones: walk into them to go up or down. The main stair links all three levels.</p>
+    <button id="helpClose">Close</button>
+  </section>
+  <div id="ammo" class="panel" aria-live="off"><span id="ammoN">12</span><small>/ 12</small><small id="ammoSpare">12 spare</small></div>
+  <div id="touchGun"><button id="fireBtn" aria-label="Fire">Fire</button><button id="reloadBtn" class="panel">Reload</button></div>
+  <div id="toast" class="panel" hidden></div>
+</div>
