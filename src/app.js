@@ -111,7 +111,7 @@ setTimeout(function () {
   // ---- player ----
   const P = { x: -10.2, y: 20.8, z: -0.645, yaw: 0, pitch: -0.05, vz: 0, vx: 0, vy: 0, r: 0.22, eye: 1.62, hb: [0, 0, 0] };
   const START = {
-    street: { x: -14.2, y: 16.3, yaw: -0.02, pitch: 0.04, label: 'Street' },
+    street: { x: -16.6, y: 19.2, yaw: -0.02, pitch: 0.06, label: 'Street' },
     ground: { x: 7.33, y: 18.85, yaw: -Math.PI / 2, pitch: -0.10, label: 'Ground floor' },
     upper: { x: 6.0, y: 19.35, yaw: -Math.PI / 2, pitch: -0.06, label: 'Upper floor' },
     basement: { x: 7.0, y: 19.4, yaw: -Math.PI / 2, pitch: -0.05, label: 'Basement' },
@@ -288,8 +288,7 @@ setTimeout(function () {
     ['Front bedroom', 'U', 1.98, 5.98, 12.17, 15.32, '11.49 m²'], ['Small bedroom', 'U', 1.98, 5.16, 15.42, 17.82, '7.80 m²'], ['Shower room', 'U', 1.98, 5.16, 18.07, 19.96, ''],
     ['Landing', 'U', 5.26, 6.64, 14.02, 18.06, '5.64 m²'], ['Staircase', 'U', 8.20, 10.23, 18.06, 19.96, '4.32 m²'], ['Work corner', 'U', 6.765, 8.16, 19.96, 20.96, ''], ['Landing', 'U', 5.26, 8.20, 18.06, 20.96, '7.07 m²'],
     ['Rear bedroom', 'U', 6.08, 9.86, 12.17, 15.94, '12.36 m²'], ['Bathroom', 'U', 6.74, 9.86, 16.04, 17.82, ''], ['Balcony', 'U', 3.90, 6.37, 20.34, 21.42, ''],
-    ['Street terrace', 'O', 0.07, 1.60, 12.35, 19.47, '11.40 m²'], ['Entrance porch', 'O', 1.60, 2.67, 18.19, 20.34, ''], ['Garden terrace', 'O', 8.86, 11.63, 12.21, 18.10, ''],
-    ['Driveway ramp', 'O', -11.3, 1.68, 12.61, 17.86, '']
+    ['Street terrace', 'O', 0.07, 1.60, 12.35, 19.47, '11.40 m²'], ['Entrance porch', 'O', 1.60, 2.67, 18.19, 20.34, ''], ['Garden terrace', 'O', 8.86, 11.63, 12.21, 18.10, '']
   ];
   const LEVELNAME = { B: ['Basement', '−2.59'], G: ['Ground floor', '±0.00'], U: ['Upper floor', '+2.88'], O: ['Outside', ''] };
   function whereAmI() { return whereAt(P.x, P.y, P.z); }
@@ -298,6 +297,7 @@ setTimeout(function () {
     const inR = (r, m = 0) => x >= r[2] - m && x <= r[3] + m && y >= r[4] - m && y <= r[5] + m;
     for (const r of ROOMS) if (r[1] === lv && inR(r)) return { name: r[0], area: r[6], lv };
     for (const r of ROOMS) if (r[1] === lv && inR(r, 0.3)) return { name: r[0], area: r[6], lv };
+    if (y >= 11.988 && z < -0.70 && inRamp(x, y)) return { name: 'Driveway ramp', area: '', lv: 'O' };
     for (const r of ROOMS) if (r[1] === 'O' && inR(r)) return { name: r[0], area: r[6], lv: 'O' };
     let n = 'Garden';
     if (y < 11.988) n = "Neighbour's side"; else if (x < -11.3) n = 'Street'; else if (x < 0.5) n = 'Front garden'; else if (y > 20.3 && x < 11.7) n = 'Side path';

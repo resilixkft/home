@@ -292,33 +292,27 @@ function buildExterior(B, nb) {
   // side path, gravel strips
   B.poly('pavers', [[-1.3, 20.31, -0.645], [2.67, 20.31, -0.645], [2.67, 21.34, -0.645], [-1.3, 21.34, -0.645]], [0, 0, 1], { ext: 1 });
   B.poly('pavers', [[-1.3, 21.34, -0.645], [11.63, 21.34, -0.645], [11.63, 22.10, -0.645], [-1.3, 22.10, -0.645]], [0, 0, 1], { ext: 1 });
-  // path from the street entrance gate to the porch steps
-  B.poly('pavers', [[-11.30, 17.34, -0.645], [-9.10, 17.34, -0.645], [-9.10, 19.30, -0.645], [-11.30, 19.30, -0.645]], [0, 0, 1], { ext: 1 });
-  B.poly('pavers', [[-9.10, 18.25, -0.645], [-0.30, 18.25, -0.645], [-0.30, 19.30, -0.645], [-9.10, 19.30, -0.645]], [0, 0, 1], { ext: 1 });
-  B.poly('pavers', [[-1.30, 19.30, -0.645], [-0.30, 19.30, -0.645], [-0.30, 20.31, -0.645], [-1.30, 20.31, -0.645]], [0, 0, 1], { ext: 1 });
+  // path from the street entrance gate straight in to the side path and the porch steps
+  B.poly('pavers', [[-11.30, 20.31, -0.645], [-1.30, 20.31, -0.645], [-1.30, 21.34, -0.645], [-11.30, 21.34, -0.645]], [0, 0, 1], { ext: 1 });
   B.poly('gravel', [[2.67, 20.34, -0.647], [4.03, 20.34, -0.647], [4.03, 21.34, -0.647], [2.67, 21.34, -0.647]], [0, 0, 1], { ext: 1 });
   B.poly('gravel', [[8.545, 20.34, -0.647], [10.60, 20.34, -0.647], [10.60, 21.34, -0.647], [8.545, 21.34, -0.647]], [0, 0, 1], { ext: 1 });
   // lightwell grate for the basement window
   B.box(4.80, 5.86, 21.29, 21.73, -1.30, -0.64, { mat: 'concrete', ext: 1, f: { zp: null, yn: null } });
   B.poly('grate', [[4.84, 21.30, -0.645], [5.82, 21.30, -0.645], [5.82, 21.69, -0.645], [4.84, 21.69, -0.645]], [0, 0, 1], { ext: 1 });
-  // ramp
-  const rampH = (x) => x >= 0.40 ? -2.61 : x >= -1.60 ? -2.61 + (0.40 - x) * 0.10 : x >= -8.90 ? -2.41 + (-1.60 - x) * 0.20 : x >= -10.90 ? -0.95 + (-8.90 - x) * 0.10 : -0.75;
-  const rx = [-11.30, -10.90, -8.90, -1.60, 0.40, 1.68];
-  for (let i = 0; i < rx.length - 1; i++) {
-    const a = rx[i], b = rx[i + 1];
-    const ya = a < -8.9 ? 13.44 : 12.61, yb = a < -8.9 ? 17.04 : 17.86;
-    B.poly(a >= 0.40 ? 'concrete' : 'grassPaver', [[a, ya, rampH(a)], [b, ya, rampH(b)], [b, yb, rampH(b)], [a, yb, rampH(a)]], [0, 0, 1], { ext: 1 });
+  // ramp: straight out of the garage, then an S-bend away from the party wall onto the car gate (RAMP in site.js)
+  const xsR = rampXs();
+  for (let i = 0; i < xsR.length - 1; i++) {
+    const a = xsR[i], b = xsR[i + 1], [ia, oa] = rampEdges(a), [ib, ob] = rampEdges(b);
+    B.poly(a >= 0.40 ? 'concrete' : 'grassPaver', [[a, ia, rampH(a)], [b, ib, rampH(b)], [b, ob, rampH(b)], [a, oa, rampH(a)]], [0, 0, 1], { ext: 1 });
   }
   B.poly('grate', [[0.60, 12.61, -2.605], [0.80, 12.61, -2.605], [0.80, 17.86, -2.605], [0.60, 17.86, -2.605]], [0, 0, 1], { ext: 1 });
-  for (const [ya, yb, side] of [[12.41, 12.61, 'yp'], [17.86, 18.06, 'yn']]) {
-    B.box(-8.90, 1.68, ya, yb, -2.80, -0.56, { mat: 'concrete', ext: 1 });
-    // planted hedge on top of the retaining walls (also a safety barrier)
-    B.box(-8.70, 0.05, ya - 0.10, yb + 0.10, -0.56, 0.15, { mat: 'foliage', ext: 1, collide: true });
-  }
-  // the ramp narrows to the width of the street gate for its last, nearly level stretch
-  B.box(-9.10, -8.90, 12.41, 13.44, -1.40, -0.56, { mat: 'concrete', ext: 1 });
-  B.box(-9.10, -8.90, 17.04, 18.06, -1.40, -0.56, { mat: 'concrete', ext: 1 });
-  B.box(-11.30, -9.10, 13.24, 13.44, -1.20, -0.62, { mat: 'concrete', ext: 1 });
-  B.box(-11.30, -9.10, 17.04, 17.24, -1.20, -0.62, { mat: 'concrete', ext: 1 });
+  // retaining walls along both sides, following the bend all the way to the street
+  const W = RAMP.wall;
+  rampBand(B, xsR, (x) => { const e = rampEdges(x)[0]; return [e - W, e]; }, -2.80, -0.56, { mat: 'concrete', ext: 1 }, true);
+  rampBand(B, xsR, (x) => { const e = rampEdges(x)[1]; return [e, e + W]; }, -2.80, -0.56, { mat: 'concrete', ext: 1 }, true);
+  // planted hedge on top of the retaining walls (also a safety barrier), stopping short of the street stretch
+  const xsH = rampXs(-8.90, 0.05);
+  rampBand(B, xsH, (x) => { const e = rampEdges(x)[0]; return [e - W - 0.10, e + 0.10]; }, -0.56, 0.15, { mat: 'foliage', ext: 1, collide: true }, true);
+  rampBand(B, xsH, (x) => { const e = rampEdges(x)[1]; return [e - 0.10, e + W + 0.10]; }, -0.56, 0.15, { mat: 'foliage', ext: 1, collide: true }, true);
   B.group = 'site'; B.forceGroup = null;
 }

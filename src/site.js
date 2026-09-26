@@ -1,11 +1,40 @@
 // ---------- Site: terrain, street, planting, neighbours ----------
-const SITE = { street: -11.3, rear: 26.0, sideY: 24.3 };
-const HOLES = [ // plan rects (our half); mirrored copies added automatically
+// Street front measured on site, from the party line outwards (our half; the other half mirrors it):
+// shared brick wall 8.70 m (4.35 m each), car gate 3.17, blue concrete pillar 0.90, entrance gate 0.90,
+// brick pier with the house number 0.80, slatted fence 2.15, brick pier 0.83 to the side boundary.
+const FRONT = { wall: 16.338, car1: 19.508, pil1: 20.408, gate1: 21.308, pier1: 22.108, fence1: 24.258, side: 25.088 };
+const SITE = { street: -11.3, rear: 26.0, sideY: FRONT.side };
+const HOLES = [ // plan rects (our half); mirrored copies added automatically. The ramps are tested separately.
   [1.60, 8.86, 11.99, 17.81], [2.67, 8.545, 17.81, 20.34], [4.03, 8.545, 20.34, 21.34], [8.48, 10.53, 17.68, 20.34],
-  [-8.90, 1.68, 12.41, 18.06], [-11.30, -8.90, 13.24, 17.24], [4.80, 5.86, 21.29, 21.73]
+  [4.80, 5.86, 21.29, 21.73]
 ];
+// ---------- Driveway ramp (basement plan + the measured car gate) ----------
+// Straight for its first 1.4 m out from the garage (tiled apron and drain), then an S-bend away from the party
+// wall that lines it up with the car gate, and straight again for the last 2.2 m to the street.
+const RAMP = { xs: -11.30, xg: -9.10, xb: -1.40, xe: 1.68, in0: 12.61, out0: 17.86, in1: FRONT.wall, out1: FRONT.car1, wall: 0.20 };
+function rampS(x) { if (x >= RAMP.xb) return 0; if (x <= RAMP.xg) return 1; const t = (RAMP.xb - x) / (RAMP.xb - RAMP.xg); return 1.5 * t * t + t * t * t - 1.5 * t * t * t * t; }
+function rampEdges(x) { const s = rampS(x); return [RAMP.in0 + (RAMP.in1 - RAMP.in0) * s, RAMP.out0 + (RAMP.out1 - RAMP.out0) * s]; }
+function rampXs(x0 = RAMP.xs, x1 = RAMP.xe) { // sample stations along the ramp (every slope break and bend step)
+  const s = new Set([RAMP.xs, -10.90, RAMP.xg, -8.90, -1.60, RAMP.xb, 0.40, RAMP.xe, x0, x1]);
+  for (let k = 1; k < 22; k++) s.add(+(RAMP.xg + (RAMP.xb - RAMP.xg) * k / 22).toFixed(4));
+  return [...s].filter(x => x >= x0 - 1e-6 && x <= x1 + 1e-6).sort((a, b) => a - b);
+}
+// a band that follows the ramp: y from yf(x)[0] to yf(x)[1] (our half's coordinates), z0..z1 (numbers or functions of x)
+function rampBand(B, xs, yf, z0, z1, o, caps = false) {
+  const Z = (z, x) => typeof z === 'function' ? z(x) : z;
+  for (let i = 0; i < xs.length - 1; i++) {
+    const a = xs[i], b = xs[i + 1], [a0, a1] = yf(a), [b0, b1] = yf(b), top = [Z(z1, a), Z(z1, b)], bot = [Z(z0, a), Z(z0, b)];
+    B.poly(o.mat, [[a, a0, top[0]], [b, b0, top[1]], [b, b1, top[1]], [a, a1, top[0]]], [0, 0, 1], o);
+    if (top[0] - bot[0] > 1e-4 || top[1] - bot[1] > 1e-4) for (const [ya, yb, sg] of [[a0, b0, -1], [a1, b1, 1]]) { const dx = b - a, dy = yb - ya, l = Math.hypot(dx, dy);
+      B.poly(o.mat, [[a, ya, bot[0]], [b, yb, bot[1]], [b, yb, top[1]], [a, ya, top[0]]], [-sg * dy / l, sg * dx / l, 0], o); }
+    if (caps && i === 0) B.poly(o.mat, [[a, a0, bot[0]], [a, a1, bot[0]], [a, a1, top[0]], [a, a0, top[0]]], [-1, 0, 0], o);
+    if (caps && i === xs.length - 2) B.poly(o.mat, [[b, b0, bot[1]], [b, b1, bot[1]], [b, b1, top[1]], [b, b0, top[1]]], [1, 0, 0], o);
+    if (o.collide) B.addCollider(a, b, Math.min(a0, b0), Math.max(a1, b1), Math.min(...bot), Math.max(...top));
+  }
+}
 function inHole(x, y) {
   const yy = y < 11.988 ? MIRROR_Y - y : y;
+  if (x > RAMP.xs && x < RAMP.xe) { const [a, b] = rampEdges(x); if (yy > a - RAMP.wall && yy < b + RAMP.wall) return true; }
   for (const h of HOLES) if (x > h[0] + 1e-4 && x < h[1] - 1e-4 && yy > h[2] + 1e-4 && yy < h[3] - 1e-4) return true;
   return false;
 }
@@ -14,11 +43,10 @@ function terrainH(x, y) {
   if (x > 11.0) h -= (Math.min(x, 26) - 11.0) * 0.055;
   if (x > 26) h -= (x - 26) * 0.03;
   if (x < -11.3) h = x >= -12.5 ? -0.68 : x >= -12.65 ? -0.75 : x >= -21.0 ? -0.82 : x >= -22.4 ? -0.68 : -0.72;
-  // gentle mound under the front conifers
   return h;
 }
 function rampH(x) { return x >= 0.40 ? -2.61 : x >= -1.60 ? -2.61 + (0.40 - x) * 0.10 : x >= -8.90 ? -2.41 + (-1.60 - x) * 0.20 : x >= -10.90 ? -0.95 + (-8.90 - x) * 0.10 : -0.75; }
-function inRamp(x, y) { const yy = y < 11.988 ? MIRROR_Y - y : y; return (x > -11.3 && x < -8.9 && yy > 13.44 && yy < 17.04) || (x >= -8.9 && x < 1.70 && yy > 12.61 && yy < 17.86); }
+function inRamp(x, y) { const yy = y < 11.988 ? MIRROR_Y - y : y; if (!(x > RAMP.xs && x < 1.70)) return false; const [a, b] = rampEdges(x); return yy > a && yy < b; }
 
 function buildSite(B) {
   B.mirror = false; B.group = 'site'; B.extF = 1;
@@ -34,8 +62,16 @@ function buildSite(B) {
     const x0 = X[i], x1 = X[i + 1], y0 = Y[j], y1 = Y[j + 1], cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     if (inHole(cx, cy)) continue;
     if (cx < -11.3) continue; // sidewalk and road built separately
+    if (cx < 1.60 && Math.abs(cy - 11.988) < 22.10 - 11.988) continue; // front gardens around the ramps: built below
     B.poly('grass', [[x0, y0, terrainH(x0, y0)], [x1, y0, terrainH(x1, y0)], [x1, y1, terrainH(x1, y1)], [x0, y1, terrainH(x0, y1)]], [0, 0, 1], { ext: 1 });
   }
+  // front gardens: lawn strips that follow the bent ramp walls, from the party line to the ramp and beyond it
+  for (const nb of [false, true]) {
+    B.mirror = nb;
+    rampBand(B, rampXs(RAMP.xs, 1.60), (x) => [11.988, rampEdges(x)[0] - RAMP.wall], -0.66, -0.66, { mat: 'grass', ext: 1 });
+    rampBand(B, rampXs(RAMP.xs, 1.60), (x) => [rampEdges(x)[1] + RAMP.wall, 22.10], -0.66, -0.66, { mat: 'grass', ext: 1 });
+  }
+  B.mirror = false;
   // street: sidewalk + curb + road
   B.poly('concrete', [[-12.5, -40, -0.68], [-11.3, -40, -0.68], [-11.3, 64, -0.68], [-12.5, 64, -0.68]], [0, 0, 1], { ext: 1 });
   B.box(-12.65, -12.5, -40, 64, -0.82, -0.68, { mat: 'concrete', ext: 1 });
@@ -51,7 +87,7 @@ function buildSite(B) {
   buildSideFence(B);
   B.mirror = false; B.group = 'site'; B.extF = 1;
   // side boundary hedge of the other half (thuja)
-  B.box(-11.2, 26.0, MIRROR_Y - 24.75, MIRROR_Y - 24.05, -1.5, 1.85, { mat: 'foliage', ext: 1, collide: true });
+  B.box(-11.2, 26.0, MIRROR_Y - FRONT.side, MIRROR_Y - FRONT.side + 0.70, -1.5, 1.85, { mat: 'foliage', ext: 1, collide: true });
   // rear boundary with Csaba's house: green welded-mesh fence along the full width of both back gardens
   buildRearFence(B);
   B.mirror = false; B.group = 'site'; B.extF = 1;
@@ -74,7 +110,7 @@ function buildSite(B) {
   conifer(-7.8, 2.6, 13, 2.6); conifer(-9.4, 23.1, 7.5, 1.0);
   decid(13.2, 23.0, 7.5, 2.4); decid(19.5, 19.0, 5.5, 2.0); decid(21.0, 5.5, 6.5, 2.3);
   conifer(24.0, 16.0, 9, 2.0); cypress(12.5, 11.2, 4.5, 0.9);
-  for (const [x, y, r] of [[-4, 23.0, 0.6], [-6, 20.4, 0.8], [14, 23.3, 0.7], [17, 23.5, 0.8], [22, 23.2, 0.9], [15, 0.7, 0.8], [20, 0.9, 0.7], [11.9, 21.5, 0.5], [-9, 23.2, 0.9], [-9, 0.8, 0.9]]) shrub(x, y, r);
+  for (const [x, y, r] of [[-4, 23.0, 0.6], [-6, 22.7, 0.8], [14, 23.3, 0.7], [17, 23.5, 0.8], [22, 23.2, 0.9], [15, 0.7, 0.8], [20, 0.9, 0.7], [11.9, 21.5, 0.5], [-9, 23.2, 0.9], [-9, 0.8, 0.9]]) shrub(x, y, r);
   // garden furniture on the rear terrace: corner sofa, dining set
   B.group = 'site';
   const T = -0.15;
@@ -235,9 +271,10 @@ function buildSideFence(B) {
   B.mirror = false; B.group = 'site'; B.extF = 1;
   const R = rng(4242);
   const xA = -11.07, xB = 25.80;           // street brick pier .. rear hedge
-  const pY0 = 24.08, pY1 = 24.32;          // plinth, our face .. neighbour's face
-  const postY0 = 24.14, postY1 = 24.20;    // 60 mm square posts on our side of the boards
-  const railY = 24.200, bY0 = 24.207, bY1 = 24.229; // angle rails behind the posts, 22 mm boards behind the rails
+  const D = FRONT.side - 0.008 - 24.32;    // on the measured side boundary, ending at the last brick pier of the street fence
+  const pY0 = 24.08 + D, pY1 = 24.32 + D; // plinth, our face .. neighbour's face
+  const postY0 = 24.14 + D, postY1 = 24.20 + D; // 60 mm square posts on our side of the boards
+  const railY = 24.200 + D, bY0 = 24.207 + D, bY1 = 24.229 + D; // angle rails behind the posts, 22 mm boards behind the rails
   const PL = 0.40, CAP = 0.07, HT = 1.66;  // plinth above our ground, rounded coping, fence above the plinth
   const cutZ = (x) => terrainH(x, 24.2) + PL + 1.62; // straight top line of the boards, parallel to the ground
   const frame = { mat: 'zinc', col: '#2e2722', ext: 1 };
@@ -307,7 +344,7 @@ function buildSideFence(B) {
 // of both back gardens, from the other half's side hedge to our timber side fence, and can be seen through.
 function buildRearFence(B) {
   B.mirror = false; B.group = 'site'; B.extF = 1;
-  const X = 26.2, y0 = MIRROR_Y - 24.4, y1 = 24.2, PH = 1.53, gap = 0.05, bends = [0.38, 1.08], bh = 0.05, bd = 0.035;
+  const X = 26.2, y0 = MIRROR_Y - FRONT.side + 0.35, y1 = FRONT.side - 0.12, PH = 1.53, gap = 0.05, bends = [0.38, 1.08], bh = 0.05, bd = 0.035;
   const zg = terrainH(X, 12), green = { mat: 'paint', col: '#1f5a3a', ext: 1 }, cap = { mat: 'paint', col: '#1b1d1e', ext: 1 };
   const n = Math.max(1, Math.round((y1 - y0) / 2.5)), pitch = (y1 - y0) / n;
   // one panel between two post faces: straight runs plus the two V-bends pushed out towards Csaba's side
@@ -327,7 +364,7 @@ function buildRearFence(B) {
   B.addCollider(X - 0.06, X + 0.06, y0 - 0.03, y1 + 0.03, zg - 0.4, zg + gap + PH + 0.05);
 }
 
-// ---------- Street fence and entrance (from the photos): brick + blue concrete, dark timber gates ----------
+// ---------- Street fence and entrance (measured on site, see FRONT): brick + blue concrete, dark timber gates ----------
 function slatPanel(B, xc, a, b, z0, z1, o = {}) {
   // horizontal dark timber slats in a dark steel frame, panel in the plane x = xc, spanning y a..b
   const fr = 0.04, t = o.t || 0.035, sl = 0.12, gap = 0.036, fcol = '#2a231f';
@@ -347,63 +384,63 @@ function brickPier(B, x0, x1, y0, y1, zTop, cap = true) {
 }
 function buildFrontFence(B) {
   B.group = 'site'; B.extF = 1;
-  // shared middle wall, centred on the party line: blue concrete plinth, klinker brick, concrete coping
+  const F = FRONT, carMid = (F.wall + F.car1) / 2, pilMid = (F.car1 + F.pil1) / 2;
+  // shared wall between the two car gates, centred on the party line: blue concrete plinth, klinker brick, concrete coping
   B.mirror = false;
-  B.box(-11.45, -11.15, 10.536, 13.44, -0.70, -0.05, { mat: 'blueConcrete', ext: 1, collide: true });
-  B.box(-11.45, -11.15, 10.536, 13.44, -0.05, 1.45, { mat: 'brick', ext: 1, collide: true });
-  B.box(-11.49, -11.11, 10.50, 13.48, 1.45, 1.53, { mat: 'coping', ext: 1 });
+  B.box(-11.45, -11.15, MIRROR_Y - F.wall, F.wall, -0.70, -0.05, { mat: 'blueConcrete', ext: 1, collide: true });
+  B.box(-11.45, -11.15, MIRROR_Y - F.wall, F.wall, -0.05, 1.45, { mat: 'brick', ext: 1, collide: true });
+  B.box(-11.49, -11.11, MIRROR_Y - F.wall - 0.04, F.wall + 0.04, 1.45, 1.53, { mat: 'coping', ext: 1 });
   for (const nb of [false, true]) {
     B.mirror = nb;
-    // gate track and pavement apron with drainage channel in front of the car gate
-    B.box(-11.07, -11.03, 10.60, 17.04, -0.68, -0.655, { mat: 'metal', col: '#5b5d5f', ext: 1 });
-    B.poly('pavers', [[-12.50, 13.44, -0.677], [-11.30, 13.44, -0.677], [-11.30, 18.34, -0.677], [-12.50, 18.34, -0.677]], [0, 0, 1], { ext: 1 });
-    B.poly('grate', [[-12.32, 13.44, -0.674], [-12.16, 13.44, -0.674], [-12.16, 17.04, -0.674], [-12.32, 17.04, -0.674]], [0, 0, 1], { ext: 1 });
-    // blue concrete gate post with pale cap, card reader
-    B.box(-11.45, -11.15, 17.04, 17.34, -0.70, 1.25, { mat: 'blueConcrete', ext: 1, collide: true });
-    B.box(-11.48, -11.12, 17.01, 17.37, 1.25, 1.31, { mat: 'stoneCap', ext: 1 });
-    B.box(-11.47, -11.45, 17.14, 17.24, -0.12, 0.04, { mat: 'metal', col: '#151515', ext: 1 });
-    B.box(-11.16, -11.05, 17.10, 17.28, 1.14, 1.18, { mat: 'metal', col: '#6d5a48', ext: 1 });
-    // brick post with house number, intercom and letter slot; carries the entrance canopy
-    brickPier(B, -11.52, -11.07, 18.34, 18.89, 1.80, false);
-    B.box(-11.535, -11.52, 18.45, 18.78, 1.00, 1.15, { mat: nb ? 'metal' : 'plate', col: nb ? '#b08a3e' : undefined, ext: 1, uvf: nb ? undefined : { xn: [[0, 1], [1, 1], [1, 0], [0, 0]] } });
-    B.box(-11.54, -11.52, 18.55, 18.68, 0.62, 0.92, { mat: 'metal', col: '#5e6163', ext: 1 });
-    B.box(-11.545, -11.54, 18.58, 18.65, 0.80, 0.88, { mat: 'metal', col: '#202326', ext: 1 });
-    B.box(-11.55, -11.52, 18.48, 18.75, 0.40, 0.52, { mat: 'metal', col: '#161616', ext: 1 });
-    // entrance canopy: thin concrete slab with dark metal edge, on the brick post and a steel post
-    B.box(-12.05, -10.80, 16.85, 19.30, 1.80, 1.92, { mat: 'coping', ext: 1 });
-    B.box(-12.07, -10.78, 16.83, 19.32, 1.92, 1.95, { mat: 'metal', col: '#2c2f32', ext: 1 });
-    B.cylZ(-11.30, 17.19, 1.31, 1.80, 0.03, 8, { mat: 'metal', col: '#2b2b2b', ext: 1 });
-    B.cylZ(-11.30, 18.02, 1.67, 1.80, 0.11, 12, { mat: 'metal', col: '#1f1f1f', ext: 1 });
-    B.cylZ(-11.30, 18.02, 1.645, 1.67, 0.095, 12, { mat: 'emissive', col: '#fff3dc', ext: 1 });
-    // slatted fence panels on blue plinth with pale coping, between brick posts
-    const panels = [[18.89, 21.60], [22.10, 23.85]];
-    for (const [a, b] of panels) {
-      B.box(-11.42, -11.17, a, b, -0.70, -0.10, { mat: 'blueConcrete', ext: 1, collide: true });
-      B.box(-11.47, -11.12, a, b, -0.10, -0.04, { mat: 'stoneCap', ext: 1 });
-      slatPanel(B, -11.295, a, b, -0.04, 1.10);
-      B.addCollider(-11.35, -11.24, a, b, -0.04, 1.10);
-    }
-    brickPier(B, -11.52, -11.07, 21.60, 22.10, 1.25);
-    brickPier(B, -11.52, -11.07, 23.85, 24.35, 1.25);
+    // gate track (the car gate slides open behind the shared wall), pavement apron and drainage channel in front
+    B.box(-11.07, -11.03, F.wall - 3.35, F.car1, -0.68, -0.655, { mat: 'metal', col: '#5b5d5f', ext: 1 });
+    B.poly('pavers', [[-12.50, F.wall, -0.677], [-11.30, F.wall, -0.677], [-11.30, F.gate1, -0.677], [-12.50, F.gate1, -0.677]], [0, 0, 1], { ext: 1 });
+    B.poly('grate', [[-12.32, F.wall, -0.674], [-12.16, F.wall, -0.674], [-12.16, F.car1, -0.674], [-12.32, F.car1, -0.674]], [0, 0, 1], { ext: 1 });
+    // blue concrete pillar between the car gate and the entrance gate, pale cap, card reader
+    B.box(-11.45, -11.15, F.car1, F.pil1, -0.70, 1.25, { mat: 'blueConcrete', ext: 1, collide: true });
+    B.box(-11.48, -11.12, F.car1 - 0.03, F.pil1 + 0.03, 1.25, 1.31, { mat: 'stoneCap', ext: 1 });
+    B.box(-11.47, -11.45, F.car1 + 0.10, F.car1 + 0.20, -0.12, 0.04, { mat: 'metal', col: '#151515', ext: 1 });
+    B.box(-11.16, -11.05, F.car1 + 0.06, F.car1 + 0.24, 1.14, 1.18, { mat: 'metal', col: '#6d5a48', ext: 1 });
+    // brick pier with the house number, intercom and letter slot; it carries the entrance canopy
+    brickPier(B, -11.52, -11.07, F.gate1, F.pier1, 1.80, false);
+    const pn = F.gate1 + 0.11;
+    B.box(-11.535, -11.52, pn, pn + 0.33, 1.00, 1.15, { mat: nb ? 'metal' : 'plate', col: nb ? '#b08a3e' : undefined, ext: 1, uvf: nb ? undefined : { xn: [[0, 1], [1, 1], [1, 0], [0, 0]] } });
+    B.box(-11.54, -11.52, pn + 0.10, pn + 0.23, 0.62, 0.92, { mat: 'metal', col: '#5e6163', ext: 1 });
+    B.box(-11.545, -11.54, pn + 0.13, pn + 0.20, 0.80, 0.88, { mat: 'metal', col: '#202326', ext: 1 });
+    B.box(-11.55, -11.52, pn + 0.03, pn + 0.30, 0.40, 0.52, { mat: 'metal', col: '#161616', ext: 1 });
+    // entrance canopy: thin concrete slab with a dark metal edge, on the brick pier and a steel post on the blue pillar
+    const c0 = pilMid - 0.34, c1 = F.pier1 + 0.41, lampY = (F.pil1 + F.gate1) / 2;
+    B.box(-12.05, -10.80, c0, c1, 1.80, 1.92, { mat: 'coping', ext: 1 });
+    B.box(-12.07, -10.78, c0 - 0.02, c1 + 0.02, 1.92, 1.95, { mat: 'metal', col: '#2c2f32', ext: 1 });
+    B.cylZ(-11.30, pilMid, 1.31, 1.80, 0.03, 8, { mat: 'metal', col: '#2b2b2b', ext: 1 });
+    B.cylZ(-11.30, lampY, 1.67, 1.80, 0.11, 12, { mat: 'metal', col: '#1f1f1f', ext: 1 });
+    B.cylZ(-11.30, lampY, 1.645, 1.67, 0.095, 12, { mat: 'emissive', col: '#fff3dc', ext: 1 });
+    // one slatted fence panel on a blue plinth with pale coping, then the last brick pier up to the side boundary
+    B.box(-11.42, -11.17, F.pier1, F.fence1, -0.70, -0.10, { mat: 'blueConcrete', ext: 1, collide: true });
+    B.box(-11.47, -11.12, F.pier1, F.fence1, -0.10, -0.04, { mat: 'stoneCap', ext: 1 });
+    slatPanel(B, -11.295, F.pier1, F.fence1, -0.04, 1.10);
+    B.addCollider(-11.35, -11.24, F.pier1, F.fence1, -0.04, 1.10);
+    brickPier(B, -11.52, -11.07, F.fence1, F.side, 1.45);
     if (nb) {
       // neighbour's gates shown closed
-      slatPanel(B, -11.05, 13.44, 17.04, -0.62, 1.30, { mid: [15.24], t: 0.05 });
-      B.addCollider(-11.09, -11.01, 13.44, 17.04, -0.62, 1.30);
-      slatPanel(B, -11.30, 17.37, 18.32, -0.60, 1.20);
-      B.addCollider(-11.34, -11.26, 17.37, 18.32, -0.60, 1.20);
+      slatPanel(B, -11.05, F.wall, F.car1, -0.62, 1.30, { mid: [carMid], t: 0.05 });
+      B.addCollider(-11.09, -11.01, F.wall, F.car1, -0.62, 1.30);
+      slatPanel(B, -11.30, F.pil1 + 0.03, F.gate1 - 0.02, -0.60, 1.20);
+      B.addCollider(-11.34, -11.26, F.pil1 + 0.03, F.gate1 - 0.02, -0.60, 1.20);
     }
   }
   B.mirror = false;
   // our gates are interactive: sliding car gate and hinged entrance gate
   const G = new Builder(); G.group = 'site'; G.collide = false; G.extF = 1;
-  slatPanel(G, -11.05, 13.44, 17.04, -0.62, 1.30, { mid: [15.24], t: 0.05 });
-  for (const y of [13.9, 16.6]) G.cylP([-11.05, y - 0.06, -0.655], [-11.05, y + 0.06, -0.655], 0.05, 10, { mat: 'metal', col: '#3a3a3a', ext: 1, caps: true });
-  B.doorDefs.push({ id: 'cargate', label: 'Car gate', group: 'site', builder: G, slide: [0, -2.85], startOpen: false, openAngle: 0,
-    hinge: [-11.05, 13.44], closed: [0, 1], w: 3.60, z0: -0.62, box: { x0: -11.10, x1: -11.00, y0: 13.44, y1: 17.04, z0: -0.62, z1: 1.30 } });
+  slatPanel(G, -11.05, F.wall, F.car1, -0.62, 1.30, { mid: [carMid], t: 0.05 });
+  for (const y of [F.wall + 0.46, F.car1 - 0.44]) G.cylP([-11.05, y - 0.06, -0.655], [-11.05, y + 0.06, -0.655], 0.05, 10, { mat: 'metal', col: '#3a3a3a', ext: 1, caps: true });
+  B.doorDefs.push({ id: 'cargate', label: 'Car gate', group: 'site', builder: G, slide: [0, -(F.car1 - F.wall) - 0.10], startOpen: false, openAngle: 0,
+    hinge: [-11.05, F.wall], closed: [0, 1], w: F.car1 - F.wall, z0: -0.62, box: { x0: -11.10, x1: -11.00, y0: F.wall, y1: F.car1, z0: -0.62, z1: 1.30 } });
   const P = new Builder(); P.group = 'site'; P.collide = false; P.extF = 1;
-  slatPanel(P, -11.30, 17.37, 18.32, -0.60, 1.20);
-  P.box(-11.36, -11.24, 18.20, 18.27, 0.30, 0.52, { mat: 'metal', col: '#2a2a2a', ext: 1 });
-  P.box(-11.40, -11.20, 18.235, 18.25, 0.44, 0.46, { mat: 'metal', col: '#b9bcbe', ext: 1 });
+  const g0 = F.pil1 + 0.03, g1 = F.gate1 - 0.02;
+  slatPanel(P, -11.30, g0, g1, -0.60, 1.20);
+  P.box(-11.36, -11.24, g1 - 0.12, g1 - 0.05, 0.30, 0.52, { mat: 'metal', col: '#2a2a2a', ext: 1 });
+  P.box(-11.40, -11.20, g1 - 0.085, g1 - 0.07, 0.44, 0.46, { mat: 'metal', col: '#b9bcbe', ext: 1 });
   B.doorDefs.push({ id: 'gate', label: 'Entrance gate', group: 'site', builder: P, startOpen: true, openAngle: Math.PI / 2,
-    hinge: [-11.30, 17.37], closed: [0, 1], w: 0.95, z0: -0.60, box: { x0: -11.34, x1: -11.26, y0: 17.37, y1: 18.32, z0: -0.60, z1: 1.20 } });
+    hinge: [-11.30, g0], closed: [0, 1], w: g1 - g0, z0: -0.60, box: { x0: -11.34, x1: -11.26, y0: g0, y1: g1, z0: -0.60, z1: 1.20 } });
 }
