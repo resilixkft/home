@@ -135,6 +135,7 @@ function buildSideFence(B) {
   const postY0 = 24.14, postY1 = 24.20;    // 60 mm square posts on our side of the boards
   const railY = 24.200, bY0 = 24.207, bY1 = 24.229; // angle rails behind the posts, 22 mm boards behind the rails
   const PL = 0.40, CAP = 0.07, HT = 1.66;  // plinth above our ground, rounded coping, fence above the plinth
+  const cutZ = (x) => terrainH(x, 24.2) + PL + 1.62; // straight top line of the boards, parallel to the ground
   const frame = { mat: 'zinc', col: '#2e2722', ext: 1 };
   const boardCols = ['#ffffff', '#f6e8de', '#eadbd0', '#fff4ec', '#e2dace', '#d9cabd', '#efe4d6', '#e4e0d0'];
   const n = Math.max(1, Math.round((xB - xA) / 2.25)), pitch = (xB - xA - 0.06) / n;
@@ -157,14 +158,15 @@ function buildSideFence(B) {
     // angle rails: upright leg behind the posts, top leg towards us
     const a = postX[i] + 0.03, b = postX[i + 1] - 0.03, rails = [zt + 0.13, zt + 1.455];
     for (const zr of rails) { B.box(a, b, railY, railY + 0.006, zr, zr + 0.045, frame); B.box(a, b, railY - 0.03, railY, zr + 0.040, zr + 0.045, frame); }
-    // boards: 10-14 cm wide with 2.5-4.5 cm gaps, uneven tops and bottoms, the odd one a little out of true
+    // boards: 10-14 cm wide with 2.5-4.5 cm gaps, uneven bottoms, the odd one a little out of true;
+    // tops cut to one straight line a constant height above the ground (level at the front, following the slope at the back)
     const list = []; let s = 0;
     for (;;) { const g = 0.025 + R() * 0.02, w = 0.10 + R() * 0.04; if (s + g + w + 0.03 > b - a) break; list.push([s + g, w]); s += g + w; }
     const k = (b - a) / (s + 0.03);
     for (const [o, w] of list) {
       const xa = a + o * k, xb = xa + w * k, zb0 = zt + 0.02 + R() * 0.05, zb1 = zb0 + (R() - 0.5) * 0.02;
-      const zh = zt + 1.57 + R() * 0.09, lean = R() < 0.3 ? (R() - 0.5) * 0.024 : 0;
-      B.prismY([[xa, zb0], [xb, zb1], [xb + lean, zh + (R() - 0.5) * 0.03], [xa + lean, zh + (R() - 0.5) * 0.03]], bY0, bY1,
+      R(); const lean = R() < 0.3 ? (R() - 0.5) * 0.024 : 0; R(); R(); // (random draws kept so the board layout is unchanged)
+      B.prismY([[xa, zb0], [xb, zb1], [xb + lean, cutZ(xb + lean)], [xa + lean, cutZ(xa + lean)]], bY0, bY1,
         { mat: 'fenceBoard', col: boardCols[(R() * boardCols.length) | 0], ext: 1 });
       for (const zr of rails) bolt((xa + xb) / 2, zr + 0.02);
     }
