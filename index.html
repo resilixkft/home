@@ -62,6 +62,14 @@
   #mapCap { font: 600 12px var(--display); color: var(--muted); padding: 5px 2px 1px; display: flex; justify-content: space-between; }
   #cross { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,0.75); box-shadow: 0 0 0 1px rgba(0,0,0,0.35); pointer-events: none; }
   body[data-mode="overview"] #cross { display: none; }
+  /* tape measure */
+  #tapeCv { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  #tapeBox { position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 9px 18px 10px; text-align: center; pointer-events: none; max-width: calc(100% - 460px); }
+  #tapeVal { font: 700 28px/1 var(--display); font-variant-numeric: tabular-nums; color: #ffc61a; }
+  #tapeSub { margin-top: 5px; font: 600 13px var(--display); color: var(--muted); }
+  body[data-tape="on"][data-mode="walk"] #cross { width: 22px; height: 22px; margin: -11px 0 0 -11px; background: transparent; border-radius: 0; box-shadow: none;
+    background: linear-gradient(#ffc61a, #ffc61a) center / 2px 100% no-repeat, linear-gradient(#ffc61a, #ffc61a) center / 100% 2px no-repeat; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+  @media (max-width: 1000px) { #tapeBox { top: 92px; max-width: calc(100% - 32px); } }
   /* foam-dart blaster */
   body[data-gun="on"][data-mode="walk"] #cross { width: 18px; height: 18px; margin: -9px 0 0 -9px; background: transparent; border: 2px solid rgba(255,255,255,0.85); box-shadow: 0 0 0 1px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.25); }
   body[data-gun="on"][data-mode="walk"] #cross::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; border-radius: 50%; background: #ff8a2a; }
@@ -134,7 +142,9 @@
 <div id="hud" hidden>
   <div id="where" class="panel"><div><span id="roomName">Street</span><span id="roomArea"></span></div><div id="levelLine"><span id="levelName">Outside</span><span id="levelZ"></span></div></div>
   <div id="mapWrap" class="panel"><canvas id="map" width="200" height="200" aria-label="Floor plan map. Click a spot to jump there."></canvas><div id="mapCap"><span>Plan</span><span>Click to jump</span></div></div>
+  <canvas id="tapeCv" aria-hidden="true"></canvas>
   <div id="cross"></div>
+  <div id="tapeBox" class="panel" hidden><div id="tapeVal"></div><div id="tapeSub"></div></div>
   <div id="lockHint" class="panel" hidden>Click the view to look around with the mouse</div>
   <button id="doorHint" class="panel" hidden><kbd>E</kbd><span id="doorHintText">Open door</span></button>
   <div id="cutbar" class="panel" hidden><span class="lbl">Show</span>
@@ -145,7 +155,7 @@
   </nav>
   <div id="tools" class="panel">
     <span id="fps"></span>
-    <button id="childBtn" aria-pressed="false" title="See the house from a child's eye height (1.20 m)">Child view</button><button id="wideBtn" aria-pressed="false" title="Wider field of view (V)">Wide view</button><button id="soundBtn" aria-pressed="true" title="Footsteps and other sounds">Sound</button><button id="gunBtn" aria-pressed="false" title="Foam-dart blaster on or off (G)">Blaster</button><button id="mapBtn">Map</button><button id="modeBtn">Overview</button><button id="helpBtn" title="Brightness, quality and controls">Settings</button>
+    <button id="childBtn" aria-pressed="false" title="See the house from a child's eye height (1.20 m)">Child view</button><button id="wideBtn" aria-pressed="false" title="Wider field of view (V)">Wide view</button><button id="soundBtn" aria-pressed="true" title="Footsteps and other sounds">Sound</button><button id="gunBtn" aria-pressed="false" title="Foam-dart blaster on or off (G)">Blaster</button><button id="tapeBtn" aria-pressed="false" title="Tape measure (T)">Tape</button><button id="mapBtn">Map</button><button id="modeBtn">Overview</button><button id="helpBtn" title="Brightness, quality and controls">Settings</button>
   </div>
   <section id="help" class="panel" hidden aria-labelledby="helpTitle">
     <h2 id="helpTitle">Settings</h2>
@@ -160,6 +170,7 @@
       <dt><kbd>V</kbd></dt><dd>Natural or wide field of view (the Wide view button)</dd>
       <dt><kbd>E</kbd></dt><dd>Use what you look at: doors, wardrobes, drawers, boxes, windows (tilt), curtains, chairs and sofas (sit), beds (lie down), the bunk-bed ladder. <kbd>E</kbd> again to stand up</dd>
       <dt><kbd>C</kbd></dt><dd>Crouch or stand up, for example to peek under the bunk bed</dd>
+      <dt><kbd>T</kbd></dt><dd>Tape measure out or away (the Tape button). Aim the crosshair at a point and click or press <kbd>Q</kbd> to set the start, again for the end. <kbd>X</kbd> clears the measurements</dd>
       <dt><kbd>M</kbd></dt><dd>Show or hide the plan. Click the plan to jump to a spot</dd>
       <dt><kbd>O</kbd></dt><dd>View from above. Drag to orbit, scroll to zoom, and peel off floors with Show</dd>
       <dt><kbd>G</kbd></dt><dd>Foam-dart blaster on or off (the Blaster button). It shows while you walk</dd>
@@ -449,7 +460,7 @@ class Engine {
     // bounds
     let mn = [1e9,1e9,1e9], mx = [-1e9,-1e9,-1e9];
     for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) { const v = g.pos[i*3+k]; if (v < mn[k]) mn[k] = v; if (v > mx[k]) mx[k] = v; }
-    return { vao, count: g.idx.length, min: mn, max: mx, vb, ib };
+    return { vao, count: g.idx.length, min: mn, max: mx, vb, ib, geo: { pos: g.pos, idx: g.idx } }; // geo: kept for the tape measure's ray casts
   }
   addBatch(mesh, mat, group, model) { const b = { mesh, mat, group, model: model || null, visible: true }; (model ? this.dynamic : this.batches).push(b); return b; }
   setSun(dir) { const l = Math.hypot(...dir); this.sunDir = dir.map(v => v / l); this.shadowDirty = true; }
@@ -2494,11 +2505,11 @@ function buildInterior(B) {
   for (const [x, y, r] of [[3.4, 16.6, 0.16], [3.4, 19.0, 0.14], [5.95, 16.0, 0.13], [6.3, 19.0, 0.13], [8.3, 16.9, 0.14]]) lampCeil(B, x, y, UC, r);
   // front bedroom: furnished in kidsroom.js (radiator stays here)
   radiator(B, 'x', 1.98, 1, 13.35, 14.40, U + 0.12, U + 0.62);
-  // small bedroom (daughter's room): furniture removed at the owner's request (curtains and radiator stay)
+  // small bedroom (daughter's room): bed in smallbedroom.js (curtains and radiator stay here)
   // curtains that can be drawn across the window (15.67..16.87)
   B.mover({ scaleY: { pivot: 15.30, k: (16.27 - 15.30) / (15.72 - 15.30) }, link: 'sbCurt', label: 'curtains', verbs: ['Close', 'Open'], center: [2.05, 16.27, U + 1.5], reach: 1.9, cone: 0.6 }, (D) => curtain(D, 'x', 2.02, 15.30, 15.72, U + 0.05, U + 2.42));
   B.mover({ scaleY: { pivot: 17.25, k: (17.25 - 16.27) / (17.25 - 16.80) }, link: 'sbCurt', label: 'curtains', verbs: ['Close', 'Open'], center: [2.05, 16.27, U + 1.5], reach: 1.9, cone: 0.6 }, (D) => curtain(D, 'x', 2.02, 16.80, 17.25, U + 0.05, U + 2.42));
-  radiator(B, 'x', 1.98, 1, 15.75, 16.80, U + 0.12, U + 0.62);
+  radiator(B, 'x', 1.98, 1, 15.95, 16.80, U + 0.12, U + 0.62); // ends where the desk (smallbedroom.js) begins
   // shower room
   B.box(1.98, 2.88, 18.95, 19.96, U, U + 0.06, { mat: 'gloss', col: '#f3f3f1' });
   B.poly('glass', [[1.98, 18.95, U + 0.06], [2.88, 18.95, U + 0.06], [2.88, 18.95, U + 2.05], [1.98, 18.95, U + 2.05]], [0, -1, 0], {});
@@ -3384,6 +3395,144 @@ function buildFrontBedroom(B) {
   B.group = g0;
 }
 
+// ---------- Small bedroom (the daughter's room, upstairs on the street side) ----------
+// IKEA FLEKKE day-bed (white, 2 drawers, 80x200 mattress; 207 x 91 cm, 86 cm high with the backrest) with the
+// pull-out bed pushed in, so it is a single bed. It stands along the left-hand wall as seen from the door, with its
+// head against the window wall, i.e. in the corner furthest from the door. A pillow and a duvet, nothing else.
+// The room also holds an IKEA VIKHAMMER nightstand, a MICKE desk with hutch, a HEMNES chest of drawers and an ÖRFJÄLL
+// chair, placed from a photo taken at the door. All of them are empty on purpose.
+
+function buildSmallBedroom(B) {
+  const U = LV.U, UC = LV.UC;
+  const g0 = B.group; B.group = 'upper'; B.mirror = false; B.extF = 0;
+  const IN = { ext: 0, fz: U, cz: UC };
+  const O = (o) => Object.assign({}, o, IN);
+
+  const X0 = 2.03, X1 = X0 + 2.07;          // head at the window wall (curtain plane is x = 2.02), foot toward the door
+  const Y1 = 17.82, Y0 = Y1 - 0.91;         // long back against the wall
+  const white = '#f3f2ee', zb = U + 0.05, zt = U + 0.36;   // carcass bottom / top (mattress rests on zt)
+  const WH = O({ mat: 'paint', col: white });
+
+  // feet and the white carcass with its two drawer fronts
+  for (const x of [X0 + 0.06, X1 - 0.10]) for (const y of [Y0 + 0.05, Y1 - 0.09]) B.box(x, x + 0.04, y, y + 0.04, U, zb, O({ mat: 'paint', col: '#d9d7d0' }));
+  B.box(X0, X1, Y0, Y1, zb, zt, Object.assign({ collide: false }, WH));
+  const dw = (X1 - X0 - 0.10) / 2;
+  for (let k = 0; k < 2; k++) {
+    const a = X0 + 0.05 + k * (dw + 0.00), b = a + dw - 0.01, xc = (a + b) / 2;
+    B.box(a, b, Y0 - 0.006, Y0, zb + 0.03, zt - 0.03, O({ mat: 'paint', col: '#ecebe6' }));
+    B.box(xc - 0.10, xc + 0.10, Y0 - 0.009, Y0 - 0.005, zt - 0.075, zt - 0.055, O({ mat: 'paint', col: '#8f8d86' }));   // grip slot
+  }
+
+  // backrest along the wall and a lower arm at the head end
+  B.box(X0 + 0.03, X1, Y1 - 0.03, Y1, zt, U + 0.86, WH);
+  B.box(X0, X0 + 0.03, Y0, Y1, zt, U + 0.62, WH);
+  B.box(X0 + 0.03, X1, Y1 - 0.03, Y1, U + 0.80, U + 0.86, O({ mat: 'paint', col: '#e9e8e3' }));   // top edge
+
+  // mattress 80 x 200 in a pale fitted sheet
+  const MX0 = X0 + 0.04, MX1 = MX0 + 2.00, MY1 = Y1 - 0.03, MY0 = MY1 - 0.80, mz = U + 0.54;
+  B.box(MX0, MX1, MY0, MY1, zt, mz, O({ mat: 'sheet', col: '#f4f4f1' }));
+
+  // pillow at the head
+  const py = (MY0 + MY1) / 2;
+  B.sph(MX0 + 0.27, py, mz + 0.06, 0.21, 0.30, 0.085, 14, O({ mat: 'paint', col: '#fafaf8' }));
+  B.sph(MX0 + 0.25, py + 0.04, mz + 0.095, 0.15, 0.20, 0.05, 10, O({ mat: 'paint', col: '#ffffff' }));
+
+  // duvet: soft blue-grey, folded back at the top, hanging a little over the front and the foot
+  const dx0 = MX0 + 0.58, dz = mz + 0.075, dc = '#cfdbe6';
+  B.box(dx0, MX1 + 0.02, MY0 + 0.01, MY1 - 0.01, mz, dz, O({ mat: 'fabric', col: dc }));
+  B.box(dx0, MX1 + 0.02, MY0 - 0.035, MY0 + 0.01, mz - 0.11, dz, O({ mat: 'fabric', col: dc }));
+  B.box(MX1 + 0.02, MX1 + 0.055, MY0 - 0.035, MY1 - 0.01, mz - 0.11, dz, O({ mat: 'fabric', col: dc }));
+  B.cylP([dx0 + 0.035, MY0 - 0.02, dz + 0.005], [dx0 + 0.035, MY1 - 0.01, dz + 0.005], 0.04, 10, O({ mat: 'fabric', col: '#dbe5ee', caps: true }));
+
+  B.addCollider(X0 - 0.01, X1 + 0.01, Y0 - 0.02, Y1, U, U + 0.55);
+  B.seats.push({ kind: 'lie', x: MX0 + 0.27, y: py, seatZ: mz + 0.01, face: [1, 0], label: 'bed' });
+
+  // ---- the rest of the room, all empty: nightstand, desk with hutch, chest of drawers, desk chair ----
+  const PW = (x0, x1, y0, y1, z0, z1, col = '#f4f3ef') => B.box(x0, x1, y0, y1, z0, z1, O({ mat: 'paint', col }));
+  const SLOT = '#8f8d86';
+
+  // IKEA VIKHAMMER bedside table (40 x 39 cm, 65 cm high): white drawer box on a slim white metal frame with an open shelf.
+  // Back to the window wall, in front of the radiator, next to the head of the bed; the drawer faces the room.
+  {
+    const NX0 = 2.12, NX1 = 2.51, NY0 = 16.50, NY1 = 16.90, mt = O({ mat: 'metal', col: '#eeeeec' });
+    for (const x of [NX0 + 0.005, NX1 - 0.025]) for (const y of [NY0 + 0.005, NY1 - 0.025]) B.box(x, x + 0.02, y, y + 0.02, U, U + 0.46, mt);
+    for (const z of [U + 0.04, U + 0.18]) {                                           // rails: floor level and under the shelf
+      B.box(NX0 + 0.005, NX1 - 0.005, NY0 + 0.007, NY0 + 0.021, z, z + 0.014, mt); B.box(NX0 + 0.005, NX1 - 0.005, NY1 - 0.021, NY1 - 0.007, z, z + 0.014, mt);
+      B.box(NX0 + 0.007, NX0 + 0.021, NY0 + 0.02, NY1 - 0.02, z, z + 0.014, mt); B.box(NX1 - 0.021, NX1 - 0.007, NY0 + 0.02, NY1 - 0.02, z, z + 0.014, mt);
+    }
+    PW(NX0 + 0.015, NX1 - 0.015, NY0 + 0.015, NY1 - 0.015, U + 0.194, U + 0.216);       // shelf
+    PW(NX0, NX1, NY0, NY1, U + 0.46, U + 0.64, '#f1f0ec');                              // drawer box
+    PW(NX0 - 0.005, NX1 + 0.005, NY0 - 0.005, NY1 + 0.005, U + 0.64, U + 0.655);        // top
+    PW(NX1, NX1 + 0.014, NY0 + 0.012, NY1 - 0.012, U + 0.475, U + 0.628, '#f6f5f1');    // drawer front
+    PW(NX1 + 0.008, NX1 + 0.0145, NY0 + 0.075, NY1 - 0.075, U + 0.590, U + 0.608, SLOT); // grip
+    B.addCollider(NX0 - 0.01, NX1 + 0.02, NY0 - 0.01, NY1 + 0.01, U, U + 0.655);
+  }
+
+  // IKEA MICKE desk with integrated storage (105 x 50 cm, 75 cm high) and its hutch, in the corner by the window.
+  // Drawer and cupboard stand at the door end, the knee space is by the window; the curtain hangs just behind it.
+  {
+    const DX0 = 2.03, DX1 = 3.08, DY0 = 15.43, DY1 = 15.93, CX0 = DX1 - 0.36, HY1 = 15.73;
+    PW(DX0, DX1, DY0, DY1, U + 0.725, U + 0.75);                                       // top
+    PW(DX0, DX0 + 0.022, DY0, DY1, U, U + 0.725);                                      // leg panel on the window side
+    PW(DX0 + 0.022, CX0, DY0, DY0 + 0.016, U + 0.50, U + 0.725);                       // back rail over the knee space
+    PW(CX0, DX1, DY0, DY1 - 0.02, U, U + 0.725, '#f1f0ec');                            // drawer and cupboard unit
+    PW(CX0 + 0.005, DX1 - 0.005, DY1 - 0.02, DY1, U + 0.618, U + 0.722);               // drawer front
+    PW(CX0 + 0.06, DX1 - 0.06, DY1 - 0.004, DY1 + 0.001, U + 0.695, U + 0.708, SLOT);  // grip
+    PW(CX0 + 0.005, DX1 - 0.005, DY1 - 0.02, DY1, U + 0.022, U + 0.612);               // cupboard door
+    PW(DX1 - 0.055, DX1 - 0.047, DY1 - 0.004, DY1 + 0.001, U + 0.50, U + 0.58, SLOT);   // door grip
+    B.addCollider(DX0, DX1, DY0, DY1, U, U + 1.5);
+    // hutch: back, side panels (the one at the door end a little taller), top shelf, divider and a shelf in the right bay
+    const H0 = U + 0.75;
+    PW(DX0, DX1, DY0, DY0 + 0.012, H0, U + 1.40);
+    PW(DX0, DX0 + 0.018, DY0, HY1, H0, U + 1.47);
+    PW(DX1 - 0.018, DX1, DY0, HY1, H0, U + 1.50);
+    PW(DX0 + 0.018, DX1 - 0.018, DY0, HY1, U + 1.38, U + 1.40);
+    PW(2.64, 2.658, DY0, HY1, H0, U + 1.38);
+    PW(2.658, DX1 - 0.018, DY0, HY1, U + 1.06, U + 1.078);
+  }
+
+  // IKEA HEMNES chest of 3 drawers (108 x 50 cm, 96 cm high), against the same wall right after the desk, drawers facing the room
+  {
+    const CX0 = 3.09, CX1 = 4.17, CY0 = 15.43, CY1 = 15.93, xm = (CX0 + CX1) / 2, FY = CY1 - 0.02;
+    PW(CX0 + 0.02, CX1 - 0.02, CY0, FY - 0.01, U, U + 0.07, '#e9e8e3');                // plinth
+    PW(CX0, CX1, CY0, FY, U + 0.07, U + 0.94, '#f1f0ec');                              // carcass
+    PW(CX0, CX1 + 0.012, CY0, CY1 + 0.012, U + 0.94, U + 0.965);                       // top, overhanging the front and the free end
+    for (const [z0, z1] of [[0.085, 0.355], [0.365, 0.635], [0.645, 0.930]]) {
+      const a = CX0 + 0.012, b = CX1 - 0.012, fw = 0.052, zc = U + (z0 + z1) / 2;
+      PW(a, b, FY, CY1 - 0.006, U + z0, U + z1, '#f4f3ef');                            // drawer front, recessed panel
+      PW(a, b, CY1 - 0.006, CY1, U + z1 - fw, U + z1);                                 // raised frame: top, bottom, sides
+      PW(a, b, CY1 - 0.006, CY1, U + z0, U + z0 + fw);
+      PW(a, a + fw, CY1 - 0.006, CY1, U + z0 + fw, U + z1 - fw);
+      PW(b - fw, b, CY1 - 0.006, CY1, U + z0 + fw, U + z1 - fw);
+      B.cylP([xm, CY1 - 0.004, zc], [xm, CY1 + 0.034, zc], 0.017, 10, O({ mat: 'metal', col: '#1d1d1d', caps: true }));
+    }
+    B.addCollider(CX0 - 0.005, CX1 + 0.014, CY0, CY1 + 0.04, U, U + 0.965);
+  }
+
+  // IKEA ÖRFJÄLL children's desk chair, white / pink: pulled out from the desk and turned a little toward the room
+  {
+    const cx = 2.55, cy = 16.22, a = 0.35, fx = Math.sin(a), fy = -Math.cos(a), pink = '#e4a3b4', wh = O({ mat: 'paint', col: '#f1f0ec' });
+    const phi0 = Math.atan2(-fy, -fx);                                                  // the back of the chair faces away from the desk
+    for (let k = 0; k < 5; k++) {                                                       // five-star base on castors
+      const t = a + k * Math.PI * 2 / 5, c = Math.cos(t), s = Math.sin(t);
+      B.boxR(cx + c * 0.125, cy + s * 0.125, U + 0.05, 0.25, 0.036, 0.026, t, wh);
+      B.cylZ(cx + c * 0.235, cy + s * 0.235, U, U + 0.05, 0.022, 8, O({ mat: 'paint', col: '#dcdbd6' }));
+    }
+    B.cylZ(cx, cy, U + 0.05, U + 0.085, 0.045, 10, wh);
+    B.cylZ(cx, cy, U + 0.085, U + 0.32, 0.026, 10, wh);
+    B.cylZ(cx, cy, U + 0.31, U + 0.335, 0.15, 14, wh);
+    B.cylZ(cx, cy, U + 0.335, U + 0.40, 0.19, 16, O({ mat: 'fabric', col: pink }));
+    B.cylZ(cx + Math.cos(phi0) * 0.16, cy + Math.sin(phi0) * 0.16, U + 0.40, U + 0.50, 0.015, 8, wh);
+    for (let i = 0; i < 7; i++) {                                                       // curved backrest
+      const p = phi0 + (i - 3) * 0.28;
+      B.boxR(cx + Math.cos(p) * 0.185, cy + Math.sin(p) * 0.185, U + 0.44, 0.075, 0.026, 0.30, p + Math.PI / 2, O({ mat: 'fabric', col: pink }));
+    }
+    B.addCollider(cx - 0.23, cx + 0.23, cy - 0.23, cy + 0.23, U, U + 0.75);
+    B.seats.push({ kind: 'sit', x: cx, y: cy, seatZ: U + 0.42, face: [fx, fy], label: 'chair' });
+  }
+  B.group = g0;
+}
+
 // ---------- Living room corner: fireplace and bookcases (built from three photos) ----------
 // Against the party wall (y = 12.23), from the street-side corner: three IKEA BILLY bookcases side by side (empty),
 // then the fireplace: a klinker brick column floor to ceiling with a soldier course over the insert and over the
@@ -3652,22 +3801,13 @@ function buildSite(B) {
   for (const y of [17.0, 18.1]) B.box(0.30, 0.75, y - 0.03, y + 0.03, -0.01, 0.40, { mat: 'oak', col: '#6b4430', ext: 1 });
   // lawn edge path to the rear terrace steps
   B.poly('pavers', [[11.63, 18.06, -0.645], [12.40, 18.06, -0.645], [12.40, 22.10, -0.645 - 0.03], [11.63, 22.10, -0.645 - 0.03]], [0, 0, 1], { ext: 1 });
-  // neighbouring houses for context (simple masses)
-  const house = (x0, x1, y0, y1, h, ridgeAlongY = true, wall = '#e9e3d8', roofCol = '#8a4b35') => {
-    const z0 = -1.2; B.box(x0, x1, y0, y1, z0, h, { mat: 'render', col: wall, ext: 1, collide: true });
-    const zr = h + (ridgeAlongY ? (x1 - x0) : (y1 - y0)) * 0.35;
-    if (ridgeAlongY) { const xm = (x0 + x1) / 2; B.prismY([[x0 - 0.4, h - 0.2], [x1 + 0.4, h - 0.2], [xm, zr]], y0 - 0.3, y1 + 0.3, { mat: 'roofRed', col: roofCol, ext: 1, f: { yn: 'render', yp: 'render' } }); }
-    else { const ym = (y0 + y1) / 2; B.prismX([[y0 - 0.4, h - 0.2], [y1 + 0.4, h - 0.2], [ym, zr]], x0 - 0.3, x1 + 0.3, { mat: 'roofRed', col: roofCol, ext: 1, f: { xn: 'render', xp: 'render' } }); }
-    // dark window bands
-    for (let z = 1.0; z < h - 0.5; z += 2.8) for (let x = x0 + 1.2; x < x1 - 1; x += 2.4) {
-      B.box(x, x + 1.1, y1, y1 + 0.02, z, z + 1.3, { mat: 'glassNb', ext: 1 }); B.box(x, x + 1.1, y0 - 0.02, y0, z, z + 1.3, { mat: 'glassNb', ext: 1 }); }
-  };
-  house(0, 11, 34, 43, 5.2, true); house(-1, 10, -19, -10, 5.6, true, '#efe8da', '#6f3b2c'); house(-34, -25, 4, 13, 5.0, false, '#e3ddd1'); house(-34, -25, 17, 27, 5.4, false, '#f0ebe0', '#5b3a2e');
+  // the other houses of Kont vezér utca and the rest of the street, from the street map (street.js)
+  buildStreet(B);
   buildRearHouse(B);
   B.mirror = false; B.group = 'site'; B.extF = 1;
   // distant tree line
   for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2, r = 46 + (i % 3) * 5, x = 8 + Math.cos(a) * r, y = 12 + Math.sin(a) * r;
-    if (x < -22 && x > -60 && Math.abs(y - 12) < 30) continue; (i % 2 ? decid : conifer)(x, y, 9 + (i % 4) * 2, 3 + (i % 3)); }
+    if (x < -22 && x > -60 && Math.abs(y - 12) < 30) continue; if (nearStreetHouse(x, y, 7)) continue; (i % 2 ? decid : conifer)(x, y, 9 + (i % 4) * 2, 3 + (i % 3)); }
 }
 
 // ---------- House no. 24 on the street behind (a draft from the photos, placed from the site map) ----------
@@ -3953,6 +4093,145 @@ function buildFrontFence(B) {
     hinge: [-11.30, g0], closed: [0, 1], w: g1 - g0, z0: -0.60, box: { x0: -11.34, x1: -11.26, y0: g0, y1: g1, z0: -0.60, z1: 1.20 } });
 }
 
+// ---------- Kont vezér utca: the other houses and the rest of the street (sketches) ----------
+// Footprints are taken from the street map (OpenStreetMap-style, house numbers printed on it): both sides of the road,
+// every house as a plain extruded footprint with a simple roof, so that the place and the shape of each foundation is right.
+// Storeys and roof shapes are only guessed (nothing but the map was available), to be fine-tuned later.
+// Our own pair of houses (no. 26) and Csaba's house (no. 24 behind) are not part of this list.
+// Placement: along the street the map is followed exactly. Across the street the map puts the road centre about 29 m in
+// front of our front wall, but this model has it 16.8 m in front and Csaba's house 32.2 m behind it, so the houses are moved
+// in depth by a smooth offset (their own shape and orientation are kept) to agree with the street, our house and Csaba's.
+// Each entry: id = footprint number in the map, e = 1 if on our side of the road, p = outline (x depth from the street, y along it),
+// t = triangles of the outline (for the flat top), b = rectangular blocks that get the roofs [cx, cy, yaw, length, width],
+// c = rough collision boxes [x0, x1, y0, y1].
+const STREET_HOUSES = [
+{"id":1,"e":0,"area":228,"p":[[-46.2,-65.82],[-49.08,-60.03],[-47.78,-55.98],[-38.82,-51.52],[-38.55,-45.1],[-34.96,-43.31],[-33.14,-44.23],[-29.36,-51.81],[-30.62,-57.39],[-38.98,-63.0]],"t":[[0,9,8],[0,8,7],[0,7,6],[6,5,4],[6,4,3],[0,6,3],[0,3,2],[2,1,0]],"b":[[-39.28,-56.83,24.23,15.5,8.5],[-34.06,-49.55,114.23,9.5,6.0],[-42.11,-60.29,24.23,12.5,6.5]],"c":[[-49,-48,-61,-58],[-48,-47,-63,-56],[-47,-46,-65,-55],[-46,-45,-66,-55],[-45,-43,-65,-54],[-43,-41,-64,-53],[-41,-40,-64,-52],[-40,-39,-63,-52],[-39,-38,-63,-45],[-38,-37,-62,-45],[-37,-35,-61,-44],[-35,-34,-60,-44],[-34,-33,-59,-44],[-33,-32,-59,-46],[-32,-31,-58,-48],[-31,-30,-57,-50]]},
+{"id":2,"e":1,"area":242,"p":[[-1.85,-30.09],[-5.71,-21.94],[-4.81,-17.95],[0.41,-15.48],[6.15,-17.09],[14.54,-13.12],[16.89,-18.09],[14.67,-23.93],[1.35,-30.24]],"t":[[0,8,7],[0,7,6],[0,6,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[4.83,-22.61,22.25,18.0,9.5],[0.65,-22.96,112.25,13.0,7.0],[5.78,-20.32,22.25,21.5,6.0]],"c":[[-6,-5,-22,-21],[-5,-4,-24,-18],[-4,-3,-27,-17],[-3,-2,-29,-17],[4,5,-29,-17],[-2,3,-30,-16],[3,4,-29,-16],[5,7,-28,-17],[7,9,-27,-16],[9,10,-26,-16],[10,11,-26,-15],[11,12,-25,-15],[12,13,-25,-14],[13,14,-24,-14],[14,15,-24,-13],[15,16,-22,-15],[16,17,-19,-17]]},
+{"id":4,"e":0,"area":143,"p":[[-61.33,-72.76],[-73.54,-75.29],[-75.51,-69.25],[-75.97,-65.48],[-61.87,-62.57],[-60.51,-69.12]],"t":[[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[-68.14,-69.15,10.95,12.5,10.0]],"c":[[-76,-75,-69,-65],[-75,-74,-72,-65],[-74,-71,-75,-65],[-71,-70,-75,-64],[-70,-66,-74,-64],[-66,-65,-74,-63],[-65,-62,-73,-63],[-62,-61,-73,-64]]},
+{"id":7,"e":0,"area":212,"p":[[-33.64,-32.42],[-44.26,-31.74],[-45.39,-29.95],[-44.59,-17.5],[-42.09,-15.45],[-35.84,-15.85],[-31.04,-18.1],[-31.84,-30.63]],"t":[[0,7,6],[0,6,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[-38.17,-24.03,84.62,13.5,13.0],[-39.42,-23.91,84.62,16.5,7.5]],"c":[[-45,-44,-31,-17],[-33,-32,-31,-17],[-44,-43,-32,-17],[-34,-33,-32,-17],[-43,-42,-32,-16],[-41,-34,-32,-16],[-42,-41,-32,-15],[-32,-31,-25,-18]]},
+{"id":8,"e":1,"area":184,"p":[[6.52,32.55],[6.87,37.86],[9.89,42.86],[15.59,46.47],[20.76,46.13],[22.1,43.38],[21.36,32.02],[11.64,31.96]],"t":[[0,7,6],[0,6,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[15.98,37.79,-2.27,11.5,11.0],[8.9,35.82,87.73,6.5,3.5],[17.79,39.22,87.73,14.0,6.0]],"c":[[7,8,32,39],[8,9,32,41],[9,10,32,42],[10,11,32,43],[11,12,32,44],[12,14,32,45],[14,21,32,46],[21,22,34,45]]},
+{"id":9,"e":0,"area":146,"p":[[-36.57,0.75],[-39.61,1.26],[-42.7,5.29],[-41.92,15.8],[-40.36,19.02],[-36.45,18.36],[-32.08,15.72],[-34.37,2.13]],"t":[[0,7,6],[0,6,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[-37.44,10.51,77.8,13.0,8.0],[-36.69,8.05,77.8,11.5,6.5],[-38.7,14.11,77.8,8.5,6.0]],"c":[[-43,-42,5,8],[-42,-41,4,17],[-41,-40,2,19],[-40,-37,1,19],[-37,-35,1,18],[-35,-34,2,17],[-34,-33,7,17],[-33,-32,13,16]]},
+{"id":10,"e":1,"area":209,"p":[[-0.79,59.64],[-5.29,60.43],[-4.41,69.93],[1.44,77.4],[5.61,77.02],[9.4,75.19],[7.83,59.48]],"t":[[0,6,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[3.6,67.78,80.62,15.5,9.5],[-1.37,65.31,80.62,11.0,6.5]],"c":[[-5,-4,60,69],[-4,-3,60,71],[-3,-2,60,72],[-2,-1,60,74],[-1,0,60,75],[0,1,60,76],[1,7,60,77],[7,8,59,76],[8,9,66,76]]},
+{"id":11,"e":0,"area":162,"p":[[-31.18,31.52],[-41.12,28.82],[-46.38,33.19],[-47.09,34.32],[-45.9,39.59],[-44.16,41.68],[-39.47,43.41],[-29.8,35.35]],"t":[[0,7,6],[0,6,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[-39.73,36.18,46.38,10.5,10.0],[-36.21,36.62,-43.62,11.5,6.0]],"c":[[-47,-46,33,37],[-46,-45,32,40],[-45,-44,32,41],[-44,-43,31,42],[-43,-42,30,42],[-38,-37,30,42],[-42,-39,29,43],[-39,-38,30,43],[-37,-36,30,41],[-36,-35,30,40],[-35,-34,31,39],[-34,-32,31,38],[-32,-31,31,37],[-31,-30,33,36]]},
+{"id":12,"e":1,"area":123,"p":[[9.31,90.87],[5.7,89.02],[-2.64,90.28],[-4.28,100.14],[4.67,101.63],[5.36,97.5],[7.5,97.02],[8.58,95.31]],"t":[[0,7,6],[0,6,5],[5,4,3],[0,5,3],[0,3,2],[2,1,0]],"b":[[1.09,95.73,97.47,10.5,8.5],[4.77,92.68,7.47,8.0,5.5]],"c":[[-4,-3,95,100],[-3,-2,90,100],[-2,3,90,101],[3,4,89,101],[4,5,89,102],[5,7,89,97],[7,8,90,97],[8,9,90,95]]},
+{"id":13,"e":0,"area":179,"p":[[-37.88,63.72],[-46.91,62.48],[-52.08,63.48],[-52.52,64.59],[-49.98,77.7],[-43.6,76.46],[-37.91,72.2],[-36.63,70.17]],"t":[[0,7,6],[0,6,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[-44.94,69.0,-9.45,12.5,9.5],[-48.07,70.02,80.55,14.5,6.0],[-44.53,68.42,-9.45,14.5,7.5]],"c":[[-52,-51,63,70],[-51,-50,63,75],[-42,-41,63,75],[-50,-49,63,78],[-49,-44,63,77],[-44,-42,63,76],[-41,-40,63,74],[-40,-39,63,73],[-39,-38,64,73],[-38,-37,66,72]]},
+{"id":15,"e":1,"area":254,"p":[[6.06,116.27],[1.27,116.31],[0.27,115.86],[-4.4,115.91],[-5.95,118.36],[-6.21,123.52],[-5.38,133.47],[-1.74,135.77],[5.36,135.7],[7.55,133.03],[7.68,119.86],[7.33,117.07]],"t":[[0,11,10],[0,10,9],[0,9,8],[0,8,7],[0,7,6],[0,6,5],[0,5,4],[4,3,2],[4,2,1],[4,1,0]],"b":[[0.98,125.39,92.06,17.0,12.5],[1.71,125.92,92.06,19.0,9.0]],"c":[[-6,-5,118,132],[-5,-4,116,134],[-4,-2,116,135],[-2,6,116,136],[6,7,117,134],[7,8,118,133]]},
+{"id":16,"e":1,"area":317,"p":[[13.68,145.27],[10.88,143.5],[10.12,143.76],[4.04,143.46],[-5.54,144.36],[-5.89,148.33],[-5.02,162.94],[-1.21,163.29],[6.23,162.8],[6.07,156.89],[11.05,156.76],[13.88,152.92]],"t":[[0,11,10],[0,10,9],[9,8,7],[0,9,7],[0,7,6],[0,6,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[0.42,153.75,89.38,18.5,11.5],[3.63,149.71,-0.62,17.0,11.5],[3.87,149.46,-0.62,19.5,8.0]],"c":[[-6,-5,144,155],[-5,4,144,163],[5,6,144,163],[4,5,143,163],[6,11,144,157],[11,12,144,156],[12,13,145,155],[13,14,145,153]]},
+{"id":17,"e":0,"area":133,"p":[[-35.6,117.37],[-40.17,116.91],[-44.84,118.05],[-42.72,126.82],[-39.93,129.64],[-35.36,130.1],[-31.24,129.1],[-30.88,125.5]],"t":[[0,7,6],[0,6,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[-37.89,123.57,76.77,10.0,8.0],[-41.09,122.0,76.77,9.5,5.5],[-34.17,126.29,76.77,7.0,5.0]],"c":[[-45,-44,118,119],[-44,-43,118,124],[-43,-42,117,127],[-42,-41,117,128],[-41,-40,117,129],[-40,-36,117,130],[-36,-35,118,130],[-35,-34,119,130],[-34,-33,121,130],[-33,-32,123,129],[-32,-31,124,129]]},
+{"id":18,"e":1,"area":257,"p":[[17.43,171.78],[10.55,171.17],[-0.66,171.79],[-1.24,178.29],[-1.19,184.57],[-0.11,187.0],[11.63,187.13],[13.52,183.45],[13.55,180.7],[16.08,180.73],[17.35,178.72]],"t":[[0,10,9],[0,9,8],[8,7,6],[8,6,5],[0,8,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[6.0,178.78,1.74,13.5,13.5],[9.34,175.89,1.74,15.0,8.5],[5.73,179.53,91.74,15.0,12.0]],"c":[[-1,0,172,186],[0,5,172,187],[5,12,171,187],[12,13,171,185],[13,14,171,183],[14,16,172,181],[16,17,172,180]]},
+{"id":19,"e":0,"area":145,"p":[[-31.15,151.18],[-35.36,148.85],[-44.08,149.02],[-45.43,150.54],[-45.27,158.91],[-44.08,159.66],[-30.99,159.4]],"t":[[0,6,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[-38.03,155.04,1.25,14.0,8.5],[-39.19,151.02,1.25,10.5,3.5]],"c":[[-45,-44,149,159],[-36,-34,149,159],[-44,-36,149,160],[-34,-32,150,159],[-32,-31,151,159]]},
+{"id":20,"e":1,"area":142,"p":[[-5.72,199.36],[-5.64,205.45],[-1.96,210.65],[0.27,212.06],[6.96,211.98],[6.84,201.42],[6.43,200.09],[4.43,199.25]],"t":[[0,7,6],[0,6,5],[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[2.11,205.17,88.62,10.0,9.5],[-0.46,202.48,-1.38,10.5,6.5],[3.38,206.14,88.62,12.0,7.0]],"c":[[-6,-5,199,206],[-5,-4,199,207],[-4,-3,199,208],[-3,-2,199,210],[-2,-1,199,211],[-1,5,199,212],[5,7,200,212]]},
+{"id":21,"e":1,"area":247,"p":[[29.06,234.84],[27.28,227.57],[25.24,226.98],[2.62,226.82],[-0.31,230.11],[6.66,239.74],[10.85,238.72],[10.0,235.24],[13.04,233.4],[14.65,233.57],[16.65,236.56],[20.09,235.72],[21.59,236.67]],"t":[[0,12,11],[11,10,9],[0,11,9],[0,9,8],[7,6,5],[7,5,4],[8,7,4],[0,8,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[11.8,231.29,-13.54,18.0,5.0],[21.68,231.74,-13.54,12.0,6.5],[7.12,233.19,76.46,11.5,5.0]],"c":[[0,1,229,231],[1,2,228,233],[2,3,227,234],[11,13,227,234],[14,15,227,234],[3,4,227,235],[10,11,227,235],[15,16,227,235],[26,27,227,235],[4,5,227,237],[21,22,227,237],[5,6,227,238],[6,8,227,240],[8,10,227,239],[10,11,237,239],[13,14,227,233],[16,21,227,236],[22,26,227,236],[27,28,228,235],[28,29,233,235]]},
+{"id":22,"e":0,"area":168,"p":[[-36.96,188.02],[-39.59,188.07],[-40.45,191.02],[-41.81,191.04],[-44.01,194.53],[-43.8,205.71],[-42.7,207.73],[-36.08,207.61],[-33.58,205.38],[-33.29,202.65],[-33.64,197.87],[-35.12,196.06],[-35.23,190.13]],"t":[[0,12,11],[11,10,9],[11,9,8],[0,11,8],[0,8,7],[0,7,6],[0,6,5],[0,5,4],[4,3,2],[0,4,2],[2,1,0]],"b":[[-38.71,199.29,89.35,15.5,7.5],[-38.93,201.54,-0.65,10.0,9.0],[-37.97,198.28,89.35,18.5,4.0]],"c":[[-44,-43,194,206],[-43,-42,192,208],[-42,-40,191,208],[-40,-37,188,208],[-37,-36,189,208],[-36,-35,190,207],[-35,-34,197,206],[-34,-33,200,205]]},
+{"id":23,"e":0,"area":140,"p":[[-32.82,221.97],[-34.2,220.65],[-45.03,221.53],[-46.89,228.21],[-46.28,231.85],[-32.1,230.84]],"t":[[0,5,4],[0,4,3],[0,3,2],[2,1,0]],"b":[[-38.94,226.86,-2.42,13.0,9.0]],"c":[[-47,-46,227,231],[-46,-45,223,232],[-45,-41,221,232],[-41,-33,221,231],[-33,-32,226,231]]}
+];
+
+function buildStreet(B) {
+  B.mirror = false; B.group = 'site'; B.extF = 1;
+  // ---- ground, pavements and roads continue along the whole map: y from YA to YB ----
+  const YA = -110, YB = 270, XW = -130, XE = 80;
+  const XS_SIDE = 101.0, XS_HALF = 3.25, XS_W = 1.25;          // side street on the far side (west) at y = XS_SIDE
+  const TJ = 255.0, TJ_HALF = 3.5;                              // the road that leaves to the east at the end of the map
+  const spans = (a, b, gaps) => { const out = []; let y = a; for (const [g0, g1] of gaps.slice().sort((p, q) => p[0] - q[0])) { if (g0 > y) out.push([y, Math.min(g0, b)]); y = Math.max(y, g1); } if (y < b) out.push([y, b]); return out.filter(s => s[1] - s[0] > 0.01); };
+  const quad = (mat, x0, x1, y0, y1, zf, o) => B.poly(mat, [[x0, y0, zf(x0)], [x1, y0, zf(x1)], [x1, y1, zf(x1)], [x0, y1, zf(x0)]], [0, 0, 1], o);
+  const flat = (z) => () => z, tH = (x) => terrainH(x, 0);
+  const gapSide = [XS_SIDE - XS_HALF - XS_W, XS_SIDE + XS_HALF + XS_W], gapT = [TJ - TJ_HALF - 1.25, TJ + TJ_HALF + 1.25];
+  const Y = [[YA, -40], [64, YB]];
+  for (const [ya, yb] of Y) {
+    // our side: lawn behind the pavement, following the terrain; split where the road to the east leaves
+    // (the lawn of the part built first stops at y = 61, so ours starts there)
+    for (const [s0, s1] of spans(ya === 64 ? 61 : ya, yb, [gapT])) for (const [x0, x1] of [[-11.3, 11], [11, 26], [26, XE]]) quad('grass', x0, x1, s0, s1, tH, { ext: 1 });
+    // far side: lawn, split where the side street leaves
+    for (const [s0, s1] of spans(ya, yb, [gapSide])) quad('grass', XW, -22.4, s0, s1, flat(-0.72), { ext: 1 });
+    // pavements and kerbs along the main road (the same cross-section as the part built first)
+    for (const [s0, s1] of spans(ya, yb, [gapT])) { quad('concrete', -12.5, -11.3, s0, s1, flat(-0.68), { ext: 1 }); B.box(-12.65, -12.5, s0, s1, -0.82, -0.68, { mat: 'concrete', ext: 1 }); }
+    for (const [s0, s1] of spans(ya, yb, [gapSide])) { quad('concrete', -22.4, -21.15, s0, s1, flat(-0.68), { ext: 1 }); B.box(-21.15, -21.0, s0, s1, -0.82, -0.68, { mat: 'concrete', ext: 1 }); }
+    quad('asphalt', -21, -12.65, ya, yb, flat(-0.82), { ext: 1 });
+    for (let y = Math.ceil(ya / 6) * 6 + 2; y < yb - 3; y += 6) B.poly('paint', [[-16.9, y, -0.815], [-16.78, y, -0.815], [-16.78, y + 3, -0.815], [-16.9, y + 3, -0.815]], [0, 0, 1], { col: '#e9e6dc', ext: 1 });
+  }
+  quad('grass', XW, -60, -40, 64, flat(-0.72), { ext: 1 });        // the lawn west of the part built first, between the two ends
+  // side street on the far side (west): a plain 6.5 m carriageway with a pavement each side
+  B.poly('asphalt', [[XW, XS_SIDE - XS_HALF, -0.80], [-21.0, XS_SIDE - XS_HALF, -0.80], [-21.0, XS_SIDE + XS_HALF, -0.80], [XW, XS_SIDE + XS_HALF, -0.80]], [0, 0, 1], { ext: 1 });
+  for (const s of [-1, 1]) { const a = XS_SIDE + s * XS_HALF, b = XS_SIDE + s * (XS_HALF + XS_W); quad('concrete', XW, -22.4, Math.min(a, b), Math.max(a, b), flat(-0.69), { ext: 1 }); }
+  // the road that leaves to the east where the main road ends on the map
+  B.poly('asphalt', [[-12.65, TJ - TJ_HALF, -0.82], [-12.65, TJ + TJ_HALF, -0.82], [-11.3, TJ + TJ_HALF, -0.70], [-11.3, TJ - TJ_HALF, -0.70]], [0, 0, 1], { ext: 1 });
+  for (const [x0, x1] of [[-11.3, 11], [11, 26], [26, XE]]) quad('asphalt', x0, x1, TJ - TJ_HALF, TJ + TJ_HALF, (x) => tH(x) - 0.04, { ext: 1 });
+  for (const s of [-1, 1]) { const a = TJ + s * TJ_HALF, b = TJ + s * (TJ_HALF + 1.25); for (const [x0, x1] of [[-11.3, 11], [11, 26], [26, XE]]) quad('concrete', x0, x1, Math.min(a, b), Math.max(a, b), (x) => tH(x) - 0.02, { ext: 1 }); }
+
+  // ---- the houses ----
+  const WALLS = ['#efe8da', '#e9dcc4', '#f3efe6', '#dfd6c4', '#e8e2d6', '#d9cdb6', '#f1ece0', '#e6dac8', '#ddd5c6'];
+  const ROOFS = ['#c0603f', '#b05537', '#a9563c', '#9a6048', '#b8693f', '#7c7676', '#b25f42'];
+  const PITCH = Math.tan(30 * Math.PI / 180), OV = 0.35;
+  for (const h of STREET_HOUSES) {
+    const P = h.p, n = P.length, id = h.id;
+    const wall = WALLS[(id * 5) % WALLS.length], roofCol = ROOFS[(id * 3) % ROOFS.length];
+    let hi = -9, lo = 9; for (const p of P) { const t = terrainH(p[0], p[1]); hi = Math.max(hi, t); lo = Math.min(lo, t); }
+    const G = hi, z0 = lo - 0.5;
+    const eave = G + (h.area < 130 ? 3.4 : h.area < 190 ? 5.7 : 6.0 + (id % 2) * 0.3);
+    const upper = eave - G > 5;
+    let sa = 0; for (let i = 0; i < n; i++) { const a = P[i], b = P[(i + 1) % n]; sa += a[0] * b[1] - b[0] * a[1]; }
+    const sg = sa > 0 ? 1 : -1;
+    // walls on a brick plinth, with windows
+    for (let i = 0; i < n; i++) {
+      const a = P[i], b = P[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+      if (L < 0.3) continue;
+      const ux = dx / L, uy = dy / L, nx = uy * sg, ny = -ux * sg;
+      const zp = G + 0.45;
+      B.poly('brick', [[a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], zp], [a[0], a[1], zp]], [nx, ny, 0], { ext: 1 });
+      B.poly('render', [[a[0], a[1], zp], [b[0], b[1], zp], [b[0], b[1], eave], [a[0], a[1], eave]], [nx, ny, 0], { col: wall, ext: 1 });
+      if (L < 2.6) continue;
+      const m = 0.9, use = L - 2 * m, cnt = Math.max(1, Math.round(use / 2.7)), ww = 1.25 + ((id + i) % 3) * 0.15;
+      for (let k = 0; k < cnt; k++) {
+        const t = m + (k + 0.5) * use / cnt;
+        if (L < 4 && cnt === 1 && (i + id) % 3 === 0) continue;
+        for (const [zb, zt] of upper ? [[G + 0.95, G + 2.25], [G + 3.75, G + 5.05]] : [[G + 1.0, G + 2.3]]) {
+          const c = [a[0] + ux * t, a[1] + uy * t];
+          const q = (hw, z0_, z1_, off) => [[c[0] - ux * hw + nx * off, c[1] - uy * hw + ny * off, z0_], [c[0] + ux * hw + nx * off, c[1] + uy * hw + ny * off, z0_], [c[0] + ux * hw + nx * off, c[1] + uy * hw + ny * off, z1_], [c[0] - ux * hw + nx * off, c[1] - uy * hw + ny * off, z1_]];
+          B.poly('paint', q(ww / 2 + 0.07, zb - 0.07, zt + 0.07, 0.012), [nx, ny, 0], { col: '#f1eee8', ext: 1 });
+          B.poly('glassNb', q(ww / 2, zb, zt, 0.024), [nx, ny, 0], { ext: 1 });
+        }
+      }
+    }
+    // flat top of the outline under the roofs (also covers any part the blocks do not reach)
+    for (const [i, j, k] of h.t) B.poly('roofRed', [[P[i][0], P[i][1], eave], [P[j][0], P[j][1], eave], [P[k][0], P[k][1], eave]], [0, 0, 1], { col: roofCol, ext: 1 });
+    // roofs: hips on every block (a gable on every third single-block house)
+    h.b.forEach((bk, bi) => {
+      const [cx, cy, yaw, Lb, Wb] = bk, c = Math.cos(yaw * Math.PI / 180), s = Math.sin(yaw * Math.PI / 180);
+      const hl = Lb / 2 + OV, hw = Wb / 2 + OV, zr = eave + Wb / 2 * PITCH, zd = eave - OV * PITCH;
+      const hip = h.b.length > 1 || id % 3 !== 0, hr = hip ? Math.max(0.05, (Lb - Wb) / 2) : hl;
+      const Q = (lx, ly, z) => [cx + lx * c - ly * s, cy + lx * s + ly * c, z];
+      const face = (mat, pts, o) => { // normal from the points, pointing away from the block centre line
+        const a = pts[0], b = pts[1], d = pts[2];
+        let nx = (b[1] - a[1]) * (d[2] - a[2]) - (b[2] - a[2]) * (d[1] - a[1]), ny = (b[2] - a[2]) * (d[0] - a[0]) - (b[0] - a[0]) * (d[2] - a[2]), nz = (b[0] - a[0]) * (d[1] - a[1]) - (b[1] - a[1]) * (d[0] - a[0]);
+        const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+        const mx = (a[0] + b[0] + d[0]) / 3 - cx, my = (a[1] + b[1] + d[1]) / 3 - cy;
+        if (o.up ? nz < 0 : (nx * mx + ny * my) < 0) { nx = -nx; ny = -ny; nz = -nz; }
+        B.poly(mat, pts, [nx, ny, nz], o.o);
+      };
+      const ro = { col: roofCol, ext: 1 };
+      face('roofRed', [Q(-hl, -hw, zd), Q(hl, -hw, zd), Q(hr, 0, zr), Q(-hr, 0, zr)], { up: true, o: ro });
+      face('roofRed', [Q(-hl, hw, zd), Q(hl, hw, zd), Q(hr, 0, zr), Q(-hr, 0, zr)], { up: true, o: ro });
+      if (hip) {
+        face('roofRed', [Q(hl, -hw, zd), Q(hl, hw, zd), Q(hr, 0, zr)], { up: true, o: ro });
+        face('roofRed', [Q(-hl, -hw, zd), Q(-hl, hw, zd), Q(-hr, 0, zr)], { up: true, o: ro });
+      } else {
+        face('render', [Q(hl, -hw, zd), Q(hl, hw, zd), Q(hl, 0, zr)], { o: { col: wall, ext: 1 } });
+        face('render', [Q(-hl, -hw, zd), Q(-hl, hw, zd), Q(-hl, 0, zr)], { o: { col: wall, ext: 1 } });
+      }
+      if (bi === 0 && id % 2 === 0) { // a chimney on the ridge
+        const px = cx + c * Lb * 0.22, py = cy + s * Lb * 0.22;
+        B.boxR(px, py, zr - 0.6, 0.55, 0.55, 1.5, yaw * Math.PI / 180, { mat: 'brick', ext: 1 });
+      }
+    });
+    for (const [x0, x1, y0, y1] of h.c) B.addCollider(x0, x1, y0, y1, z0, eave + 1.5, 'house');
+    // a shrub in the front garden
+    const fp = P.reduce((m, p) => (h.e ? p[0] < m[0] : p[0] > m[0]) ? p : m, P[0]), fx = fp[0] + (h.e ? -2.2 : 2.2), fy = fp[1] + 1.5;
+    const zs = terrainH(fx, fy); B.sph(fx, fy, zs + 0.6, 0.9, 0.9, 0.75, 7, { mat: 'foliage', ext: 1 });
+  }
+}
+// true if (x, y) is within m metres of one of the street houses (used to keep the tree ring off them)
+function nearStreetHouse(x, y, m) { for (const h of STREET_HOUSES) { let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const p of h.p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); } if (x > x0 - m && x < x1 + m && y > y0 - m && y < y1 + m) return true; } return false; }
+
 // ---------- Foam-dart blaster: first-person toy blaster, darts with simple physics ----------
 // A generic toy blaster (no brand markings). Held in the right hand when walking; darts fly with gravity and drag,
 // bounce off walls, furniture, glass and doors, and settle on floors and table tops.
@@ -4227,6 +4506,138 @@ function makeBlaster(ctx) {
   return { S, darts, update, fire, trigger, reload, setEnabled, clear, get enabled() { return S.enabled; }, get active() { return S.active; }, MAG };
 }
 
+// ---------- Tape measure ----------
+// T takes it out or puts it away. Aim the crosshair at a point and click (or press Q) to set the start, aim at a second
+// point and click again to fix the end. The reading is the straight-line distance, with the horizontal and height parts.
+// Q or a click starts the next measurement and keeps the earlier ones on screen; X clears them all.
+// The ray is cast against the very triangles that are drawn, so the points sit exactly on the visible surfaces.
+function makeTape(ctx) {
+  const { E, cam, $, mode, say } = ctx;
+  const S = { on: false, a: null, live: null, segs: [], last: null, frame: 0 };
+  const MAXD = 60, MAXSEG = 12;
+  const tp = (m, p) => [m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]];
+  const tv = (m, p) => [m[0] * p[0] + m[4] * p[1] + m[8] * p[2], m[1] * p[0] + m[5] * p[1] + m[9] * p[2], m[2] * p[0] + m[6] * p[1] + m[10] * p[2]];
+  const fmt = (m) => m >= 1 ? m.toFixed(2) + ' m' : Math.round(m * 100) + ' cm';
+
+  // first surface along the ray o + t d (GL coordinates), skipping glass, curtains, darts and other see-through parts
+  function cast(o, d) {
+    let best = MAXD; S.hitBatch = null;
+    for (const list of [E.batches, E.dynamic]) for (const b of list) {
+      const m = b.mat, g = b.mesh.geo;
+      if (!g || !b.visible || m.transparent || m.castShadow === false) continue;
+      let ro = o, rd = d;
+      if (b.model) { const iv = M4.invert(b.model); ro = tp(iv, o); rd = tv(iv, d); }
+      const mn = b.mesh.min, mx = b.mesh.max;
+      let t0 = 0, t1 = best, ok = true;
+      for (let k = 0; k < 3 && ok; k++) {
+        const lo = mn[k] - 1e-3, hi = mx[k] + 1e-3;
+        if (Math.abs(rd[k]) < 1e-12) { if (ro[k] < lo || ro[k] > hi) ok = false; continue; }
+        let a = (lo - ro[k]) / rd[k], c = (hi - ro[k]) / rd[k];
+        if (a > c) { const t = a; a = c; c = t; }
+        if (a > t0) t0 = a; if (c < t1) t1 = c;
+        if (t0 > t1) ok = false;
+      }
+      if (!ok) continue;
+      const p = g.pos, I = g.idx, cull = m.cull !== false;
+      for (let i = 0; i < I.length; i += 3) {
+        const a = I[i] * 3, b2 = I[i + 1] * 3, c2 = I[i + 2] * 3;
+        const e1x = p[b2] - p[a], e1y = p[b2 + 1] - p[a + 1], e1z = p[b2 + 2] - p[a + 2];
+        const e2x = p[c2] - p[a], e2y = p[c2 + 1] - p[a + 1], e2z = p[c2 + 2] - p[a + 2];
+        const hx = rd[1] * e2z - rd[2] * e2y, hy = rd[2] * e2x - rd[0] * e2z, hz = rd[0] * e2y - rd[1] * e2x;
+        const det = e1x * hx + e1y * hy + e1z * hz;
+        if (cull ? det < 1e-12 : Math.abs(det) < 1e-12) continue;   // back faces are not drawn, so they are not measured
+        const f = 1 / det, sx = ro[0] - p[a], sy = ro[1] - p[a + 1], sz = ro[2] - p[a + 2];
+        const u = f * (sx * hx + sy * hy + sz * hz); if (u < 0 || u > 1) continue;
+        const qx = sy * e1z - sz * e1y, qy = sz * e1x - sx * e1z, qz = sx * e1y - sy * e1x;
+        const v = f * (rd[0] * qx + rd[1] * qy + rd[2] * qz); if (v < 0 || u + v > 1) continue;
+        const t = f * (e2x * qx + e2y * qy + e2z * qz);
+        if (t > 0.01 && t < best) { best = t; S.hitBatch = b; }
+      }
+    }
+    return best < MAXD ? [o[0] + d[0] * best, o[1] + d[1] * best, o[2] + d[2] * best] : null;
+  }
+  function aim() {
+    const o = cam.eye.slice(), d = [cam.target[0] - o[0], cam.target[1] - o[1], cam.target[2] - o[2]], l = Math.hypot(...d);
+    return cast(o, [d[0] / l, d[1] / l, d[2] / l]);
+  }
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const parts = (a, b) => ({ d: dist(a, b), h: Math.hypot(a[0] - b[0], a[2] - b[2]), v: Math.abs(a[1] - b[1]) });
+  function detail(a, b) { const r = parts(a, b); return r.h > 0.02 && r.v > 0.02 ? 'horizontal ' + fmt(r.h) + '  ·  height ' + fmt(r.v) : ''; }
+
+  function panel() {
+    const box = $('tapeBox'), show = S.on && mode() === 'walk';
+    box.hidden = !show; if (!show) return;
+    let val, sub;
+    if (S.a) { if (S.live) { val = fmt(dist(S.a, S.live)); sub = detail(S.a, S.live) || 'Click or press Q to set the end'; } else { val = 'Out of range'; sub = 'Aim at a surface'; } }
+    else if (S.last) { val = fmt(S.last.d); sub = (detail(S.last.a, S.last.b) ? detail(S.last.a, S.last.b) + '  ·  ' : '') + 'Click or Q for a new one'; }
+    else { val = 'Tape measure'; sub = 'Aim at a point and click (or press Q). X clears, T puts it away'; }
+    if ($('tapeVal').textContent !== val) $('tapeVal').textContent = val;
+    if ($('tapeSub').textContent !== sub) $('tapeSub').textContent = sub;
+  }
+  function toggle(force) {
+    const on = force === undefined ? !S.on : force;
+    if (on && mode() !== 'walk') { say('The tape measure works while you walk'); return; }
+    S.on = on; S.a = null; S.live = null;
+    $('tapeBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
+    document.body.dataset.tape = on ? 'on' : 'off';
+    if (on) say('Tape measure out: click or press Q to set points, X clears, T puts it away');
+    panel(); draw();
+  }
+  function place() {
+    if (!S.on || mode() !== 'walk') return;
+    const p = aim();
+    if (!p) { say('Nothing there to measure. Aim at a wall, floor or object'); return; }
+    if (!S.a) { S.a = p; S.last = null; S.live = p; }
+    else { S.segs.push([S.a, p]); if (S.segs.length > MAXSEG) S.segs.shift(); S.last = { a: S.a, b: p, d: dist(S.a, p) }; S.a = null; S.live = null; }
+    panel();
+  }
+  function clear() { S.a = null; S.live = null; S.segs = []; S.last = null; panel(); draw(); }
+
+  // ---- drawing on a 2D layer above the 3D view ----
+  function draw() {
+    const cv = $('tapeCv'), w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    const g = cv.getContext('2d'); g.clearRect(0, 0, w, h);
+    if (!S.on) return;
+    const vp = M4.mul(M4.persp(cam.fov, w / Math.max(1, h), cam.near, cam.far), M4.lookAt(cam.eye, cam.target, [0, 1, 0]));
+    const clip = (p) => [vp[0] * p[0] + vp[4] * p[1] + vp[8] * p[2] + vp[12], vp[1] * p[0] + vp[5] * p[1] + vp[9] * p[2] + vp[13], vp[3] * p[0] + vp[7] * p[1] + vp[11] * p[2] + vp[15]];
+    const scr = (c) => [(c[0] / c[2] * 0.5 + 0.5) * w, (1 - (c[1] / c[2] * 0.5 + 0.5)) * h];
+    const NEAR = 0.05;
+    const seg = (A, B, live) => {
+      let ca = clip(A), cb = clip(B);
+      if (ca[2] < NEAR && cb[2] < NEAR) return;
+      const ea = ca[2] >= NEAR, eb = cb[2] >= NEAR;
+      const cut = (p, q) => { const t = (NEAR - p[2]) / (q[2] - p[2]); return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, NEAR]; };
+      const pa = scr(ea ? ca : cut(ca, cb)), pb = scr(eb ? cb : cut(cb, ca));
+      g.lineCap = 'round';
+      g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 6; g.beginPath(); g.moveTo(pa[0], pa[1]); g.lineTo(pb[0], pb[1]); g.stroke();
+      g.strokeStyle = live ? '#ffe27a' : '#ffc61a'; g.lineWidth = 3; g.beginPath(); g.moveTo(pa[0], pa[1]); g.lineTo(pb[0], pb[1]); g.stroke();
+      // tick marks at the ends that are on screen
+      for (const [e, pt] of [[ea, pa], [eb, pb]]) if (e) { g.fillStyle = '#ffc61a'; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.lineWidth = 2; g.beginPath(); g.arc(pt[0], pt[1], 5, 0, 7); g.fill(); g.stroke(); }
+      // label at the middle of the visible part
+      const mx = (pa[0] + pb[0]) / 2, my = (pa[1] + pb[1]) / 2;
+      if (mx < -50 || mx > w + 50 || my < -50 || my > h + 50) return;
+      const txt = fmt(dist(A, B));
+      g.font = '700 16px "Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      const tw = g.measureText(txt).width + 16, th = 24, lx = mx, ly = my - 18;
+      g.fillStyle = 'rgba(24,28,31,0.88)'; g.strokeStyle = '#ffc61a'; g.lineWidth = 1.5;
+      g.beginPath(); g.roundRect ? g.roundRect(lx - tw / 2, ly - th / 2, tw, th, 5) : g.rect(lx - tw / 2, ly - th / 2, tw, th); g.fill(); g.stroke();
+      g.fillStyle = '#fff'; g.fillText(txt, lx, ly + 1);
+    };
+    for (const [A, B] of S.segs) seg(A, B, false);
+    if (S.a && S.live) seg(S.a, S.live, true);
+    else if (S.a) { const c = clip(S.a); if (c[2] > NEAR) { const q = scr(c); g.fillStyle = '#ffc61a'; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.lineWidth = 2; g.beginPath(); g.arc(q[0], q[1], 5, 0, 7); g.fill(); g.stroke(); } }
+  }
+  // called every frame after the camera has been placed
+  function update() {
+    if (!S.on) return;
+    if (mode() !== 'walk') { panel(); draw(); return; }
+    if (S.a && (S.frame++ & 1) === 0) { S.live = aim(); }   // the live reading, every other frame
+    panel(); draw();
+  }
+  return { toggle, place, clear, update, cast, aim, get on() { return S.on; }, S };
+}
+
 // ---------- Application ----------
 setTimeout(function () {
   const $ = (id) => document.getElementById(id);
@@ -4282,6 +4693,7 @@ setTimeout(function () {
   buildRearBedroom(B);
   buildUpperBath(B);
   buildFrontBedroom(B);
+  buildSmallBedroom(B);
   buildLivingCorner(B);
   buildSite(B);
   buildDoors(B);
@@ -4452,7 +4864,7 @@ setTimeout(function () {
     bobW += (Math.min(1, vl / 1.1) * (P.vz === 0 ? 1 : 0) - bobW) * (1 - Math.exp(-8 * dt));
     const bz = -A * bobW * (1 + Math.cos(2 * Math.PI * ph)) / 2, bs = footSide * A * 0.45 * bobW * Math.sin(Math.PI * ph);
     P.hb = window.__nobob ? [0, 0, 0] : [-Math.sin(P.yaw) * bs, Math.cos(P.yaw) * bs, bz];
-    P.x = Math.max(-40, Math.min(60, P.x)); P.y = Math.max(-20, Math.min(45, P.y));
+    P.x = Math.max(-125, Math.min(75, P.x)); P.y = Math.max(-105, Math.min(265, P.y));
   }
 
   // ---- overview orbit ----
@@ -4715,6 +5127,7 @@ setTimeout(function () {
     }
     return out;
   }
+  const tape = makeTape({ E, cam, $, mode: () => mode, say: (t) => showToast(t) });
   const blaster = makeBlaster({ E, mats, P, floorAt, surfaces, boxesNear, outdoorAt: (x, y, z) => whereAt(x, y, z).lv === 'O' });
   const ammoEl = $('ammoN'), ammoBox = $('ammo');
   const spareEl = $('ammoSpare');
@@ -4730,15 +5143,18 @@ setTimeout(function () {
   }
 
   // ---- input ----
-  let locked = false, dragging = false, lastX = 0, lastY = 0;
+  let locked = false, lockFailed = false, dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0;
   const touchMove = { f: 0, s: 0 };
   document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; $('lockHint').hidden = locked || mode !== 'walk'; });
-  canvas.addEventListener('click', () => { if (mode === 'walk' && !locked && matchMedia('(pointer: fine)').matches) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} } });
+  canvas.addEventListener('click', (e) => {
+    // with the tape out, a click (not the end of a drag) sets a point once the mouse is captured, or when it can't be captured here
+    if (tape.on && mode === 'walk' && (locked || lockFailed || !matchMedia('(pointer: fine)').matches) && Math.hypot(e.clientX - downX, e.clientY - downY) < 5) tape.place();
+    if (mode === 'walk' && !locked && matchMedia('(pointer: fine)').matches) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} } });
   // the mouse only looks: captured, moving it looks; free, a left-button drag looks. The blaster fires with F.
-  document.addEventListener('pointerlockerror', () => { $('lockHint').textContent = 'Drag the view to look around'; });
+  document.addEventListener('pointerlockerror', () => { lockFailed = true; $('lockHint').textContent = 'Drag the view to look around'; });
   canvas.addEventListener('contextmenu', (e) => { if (mode === 'walk') e.preventDefault(); }); // a stray right-click shouldn't release the mouse
   canvas.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button !== 0) return;
-    dragging = true; lastX = e.clientX; lastY = e.clientY; try { canvas.setPointerCapture(e.pointerId); } catch (err) {} if (e.pointerType === 'touch' && mode === 'walk') touchStart(e); });
+    dragging = true; lastX = downX = e.clientX; lastY = downY = e.clientY; try { canvas.setPointerCapture(e.pointerId); } catch (err) {} if (e.pointerType === 'touch' && mode === 'walk') touchStart(e); });
   canvas.addEventListener('pointerup', (e) => { dragging = false; touchMove.f = 0; touchMove.s = 0; });
   canvas.addEventListener('pointermove', (e) => {
     if (locked) { look(e.movementX, e.movementY); return; }
@@ -4758,6 +5174,9 @@ setTimeout(function () {
     if (mode === 'walk' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
     if (e.code === 'KeyE' && !e.repeat) useKey();
     if (e.code === 'KeyC' && !e.repeat && mode === 'walk' && !pose) { crouch = !crouch; showToast(crouch ? 'Crouching. Press C to stand up' : 'Standing'); }
+    if (e.code === 'KeyT' && !e.repeat) tape.toggle();
+    if (e.code === 'KeyQ' && !e.repeat) tape.place();
+    if (e.code === 'KeyX' && !e.repeat) tape.clear();
     if (e.code === 'KeyG' && !e.repeat) setBlaster(!blaster.enabled);
     if (e.code === 'KeyV' && !e.repeat) setWide(!wideView, true);
     if (e.code === 'KeyR' && blaster.active) blaster.reload();
@@ -4799,6 +5218,7 @@ setTimeout(function () {
   // browsers only allow sound after a click or key press: wake the audio up on the first one
   for (const ev of ['keydown', 'pointerdown']) window.addEventListener(ev, () => SND.ctx(), { once: true });
   $('gunBtn').addEventListener('click', () => setBlaster(!blaster.enabled));
+  $('tapeBtn').addEventListener('click', () => tape.toggle());
   function setWide(on, say) {
     wideView = on; $('wideBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
     try { localStorage.setItem('kh-wide', on ? '1' : '0'); } catch (e) {}
@@ -4833,6 +5253,7 @@ setTimeout(function () {
     resize(); updateCam();
     blaster.update(dt, mode === 'walk' && !pose, mode === 'walk' && whereAmI().lv === 'O');
     E.render(cam, env);
+    tape.update();
     if (!$('mapWrap').hidden && mode !== 'intro') drawMap();
     // fps + auto quality
     fpsAcc += dt; fpsN++;
@@ -4851,7 +5272,7 @@ setTimeout(function () {
   requestAnimationFrame(frame);
   // test hooks
   const sim = (steps, dt, codes) => { keys.clear(); for (const c of codes) keys.add(c); for (let i = 0; i < steps; i++) move(dt); keys.clear(); return { x: P.x, y: P.y, z: P.z }; };
-  window.__app = { groundKind, tick: (dt) => { updatePose(dt); for (const d of doors) if (d.t !== d.target) { d.t = d.target > d.t ? Math.min(1, d.t + dt * 2.6) : Math.max(0, d.t - dt * 2.6); setDoorMatrix(d); } }, pickAct, doAct, useKey, acts, get pose() { return pose; }, setCrouch: (c) => { crouch = c; }, setChild, boxesNear, blaster, setBlaster, sim, P, O, teleport, setMode, setQuality, doors, toggleDoor, floorAt, E, groups, applyCut, whereAmI, render: () => { resize(); updateCam(); E.render(cam, env); }, get mode() { return mode; } };
+  window.__app = { tape, cam, groundKind, tick: (dt) => { updatePose(dt); for (const d of doors) if (d.t !== d.target) { d.t = d.target > d.t ? Math.min(1, d.t + dt * 2.6) : Math.max(0, d.t - dt * 2.6); setDoorMatrix(d); } }, pickAct, doAct, useKey, acts, get pose() { return pose; }, setCrouch: (c) => { crouch = c; }, setChild, boxesNear, blaster, setBlaster, sim, P, O, teleport, setMode, setQuality, doors, toggleDoor, floorAt, E, groups, applyCut, whereAmI, render: () => { resize(); updateCam(); E.render(cam, env); }, get mode() { return mode; } };
 }, 40);
 
 </script>
