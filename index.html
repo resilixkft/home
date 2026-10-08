@@ -1463,6 +1463,19 @@ function lin(h) { if (Array.isArray(h)) return h; const c = hex(h); return c.map
 // rotation (for M4.rotY about the hinge) that turns a leaf lying along 'closed' to lie along 'open' (plan unit vectors)
 function hingeAng(closed, open, k = 1) { let th = Math.atan2(closed[1], closed[0]) - Math.atan2(open[1], open[0]); while (th > Math.PI) th -= 2 * Math.PI; while (th < -Math.PI) th += 2 * Math.PI; return th * k; }
 
+// a moving part's definition seen in the mirror of the party wall (plan y -> MIRROR_Y - y)
+function mirrorMoverDef(d) {
+  const M = MIRROR_Y, r = Object.assign({}, d);
+  if (d.center) r.center = [d.center[0], M - d.center[1], d.center[2]];
+  if (d.hinge) { r.hinge = [d.hinge[0], M - d.hinge[1]]; r.openAngle = -d.openAngle; }
+  if (d.slide) r.slide = [d.slide[0], -d.slide[1]];
+  // a tilt about a line along plan y is unchanged by the mirror; one about a line along plan x turns the other way
+  if (d.tilt) r.tilt = d.tilt.axis === 'x' ? Object.assign({}, d.tilt) : { axis: d.tilt.axis, p: [d.tilt.p[0], M - d.tilt.p[1]], ang: -d.tilt.ang };
+  if (d.scaleY) r.scaleY = { pivot: M - d.scaleY.pivot, k: d.scaleY.k };
+  if (d.link) r.link = 'nb-' + d.link;
+  return r;
+}
+
 class Builder {
   constructor() {
     this.buckets = new Map(); this.group = 'ground'; this.mirror = false;
@@ -1638,10 +1651,11 @@ class Builder {
   }
   // a part that moves as one piece (cabinet door, drawer, curtain, window sash). fn builds it into a child builder.
   // def: transform ({hinge, openAngle} | {slide:[dx,dy]} | {tilt:{axis,p,ang}} | {scaleY:{pivot,k}}) + label, verbs, center, reach, cone, link
+  // In the mirrored half the part is built mirrored and its movement is mirrored with it.
   mover(def, fn) {
-    if (this.mirror) return;
-    const D = new Builder(); D.group = this.forceGroup || this.group; D.collide = false; D.extF = this.extF; D.fz = this.fz; D.cz = this.cz;
+    const D = new Builder(); D.group = this.forceGroup || this.group; D.collide = false; D.extF = this.extF; D.fz = this.fz; D.cz = this.cz; D.mirror = this.mirror;
     fn(D);
+    if (this.mirror) def = mirrorMoverDef(def);
     this.doorDefs.push(Object.assign({ id: 'mv' + this.doorDefs.length, group: this.forceGroup || this.group, builder: D, startOpen: false, mover: true, reach: 1.5, cone: 0.45, verbs: ['Open', 'Close'] }, def));
   }
   ceil(x0, x1, y0, y1, z, mat, o = {}) { this.poly(mat, [[x0,y0,z],[x1,y0,z],[x1,y1,z],[x0,y1,z]], [0,0,-1], o); }
@@ -1649,7 +1663,7 @@ class Builder {
     if (this.mirror) { const a = MIRROR_Y - y1, b = MIRROR_Y - y0; y0 = a; y1 = b; }
     this.walk.push({ x0, x1, y0, y1, z, mat });
   }
-  addWalkPoly(pts, z, mat) { this.walk.push({ mat, poly: pts, z, x0: Math.min(...pts.map(p => p[0])), x1: Math.max(...pts.map(p => p[0])), y0: Math.min(...pts.map(p => p[1])), y1: Math.max(...pts.map(p => p[1])) }); }
+  addWalkPoly(pts, z, mat) { if (this.mirror) pts = pts.map(p => [p[0], MIRROR_Y - p[1]]); this.walk.push({ mat, poly: pts, z, x0: Math.min(...pts.map(p => p[0])), x1: Math.max(...pts.map(p => p[0])), y0: Math.min(...pts.map(p => p[1])), y1: Math.max(...pts.map(p => p[1])) }); }
   // Wall with openings. axis 'x': wall runs along plan y (thickness in x: t0..t1, length a..b).
   // axis 'y': wall runs along plan x (thickness in y: t0..t1, length a..b).
   // opts: open [{a,b,zb,zt}], ext side ('n'|'p') + extMat -> two layers, mat interior material, f face overrides
@@ -1714,7 +1728,7 @@ function bxA(B, axis, c0, c1, a0, a1, z0, z1, o) { if (axis === 'x') B.box(Math.
 // outer: exterior face coordinate, inner: interior face coordinate
 function windowUnit(B, axis, fp, out, outer, inner, a, b, zb, zt, o = {}) {
   const fw = o.fw || 0.07, fd = 0.08, f0 = fp - fd / 2, f1 = fp + fd / 2, fm = o.frameMat || 'woodDark';
-  const glass = B.mirror ? 'glassNb' : 'glass';
+  const glass = 'glass';
   const bottom = o.door ? 0.03 : fw;
   bxA(B, axis, f0, f1, a, a + fw, zb, zt, { mat: fm, ext: 1 });
   bxA(B, axis, f0, f1, b - fw, b, zb, zt, { mat: fm, ext: 1 });
@@ -1725,7 +1739,7 @@ function windowUnit(B, axis, fp, out, outer, inner, a, b, zb, zt, o = {}) {
   if (!o.noGlass && !o.door) { // glass stops foam darts (players are already held back by the sill wall)
     if (axis === 'x') B.addCollider(fp - 0.03, fp + 0.03, a, b, zb, zt, 'glass'); else B.addCollider(a, b, fp - 0.03, fp + 0.03, zb, zt, 'glass');
   }
-  if (!o.noGlass && o.tilt && !B.mirror) {
+  if (!o.noGlass && o.tilt) {
     // tilt-and-turn sashes: frame + glass + handle per pane, tilting inwards about the bottom edge as one movable part
     const h0 = zb + bottom, h1 = zt - fw, sw = 0.05, panes = [];
     let s0 = a + fw; for (const m of (o.mull || [])) { panes.push([s0, m - 0.045]); s0 = m + 0.045; } panes.push([s0, b - fw]);
@@ -1755,7 +1769,7 @@ function windowUnit(B, axis, fp, out, outer, inner, a, b, zb, zt, o = {}) {
     // exterior metal sill
     const s0 = outer + out * 0.05, s1 = f0 * (out < 0 ? 1 : 0) + f1 * (out > 0 ? 1 : 0);
     bxA(B, axis, out < 0 ? s0 : f1, out < 0 ? f0 : s0, a - 0.03, b + 0.03, zb - 0.04, zb + 0.005, { mat: 'zinc', col: '#8a8d90', ext: 1 });
-    if (!B.mirror && o.inSill !== false) {
+    if (o.inSill !== false) {
       const i0 = inner - out * 0.03;
       bxA(B, axis, out < 0 ? f1 : i0, out < 0 ? i0 : f0, a - 0.02, b + 0.02, zb - 0.03, zb + 0.005, { mat: o.inSillMat || 'paint', col: o.inSillCol || '#f1f0ec', ext: 0 });
     }
@@ -1793,7 +1807,7 @@ function lampCeil(B, x, y, z, r = 0.14, ext = 0) {
 
 function buildExterior(B, nb) {
   B.mirror = nb; B.extF = 1; B.forceGroup = nb ? 'nb' : null;
-  const so = nb; // skin only for the neighbour
+  const so = false; // both halves get their inner wall layers (the other half is walkable too)
   const ew = (axis, t0, t1, a, b, z0, z1, side, mat, open, extra = {}) =>
     B.wall(axis, t0, t1, a, b, z0, z1, Object.assign({ ext: side, extMat: mat, open, skinOnly: so }, extra));
   B.group = 'ground';
@@ -1807,7 +1821,7 @@ function buildExterior(B, nb) {
   ew('x', 2.67, 3.05, 18.06, 20.34, -0.70, 2.88, 'n', 'brick', [{ a: 18.19, b: 19.19, zb: 0, zt: 2.20 }], Object.assign({ endB: 'brick' }, gfIn));
   ew('y', 19.96, 20.34, 3.05, 4.03, -0.70, 2.88, 'p', 'brick', [], gfIn);
   ew('x', 4.03, 4.33, 20.34, 21.26, -0.70, 2.64, 'n', 'woodClad', [], Object.assign({ endB: 'woodClad' }, gfIn));
-  if (!nb) B.box(4.03, 4.33, 19.96, 20.34, -0.70, 2.88, { mat: 'plaster', ext: 0, fz: 0, cz: LV.GC, collide: true });
+  B.box(4.03, 4.33, 19.96, 20.34, -0.70, 2.88, { mat: 'plaster', ext: 0, fz: 0, cz: LV.GC, collide: true });
   ew('y', 20.96, 21.26, 4.33, 6.34, -0.70, 2.64, 'p', 'woodClad', [{ a: 5.03, b: 5.63, zb: 1.36, zt: 2.11 }], gfIn);
   ew('y', 20.96, 21.34, 6.34, 8.165, -0.70, 2.88, 'p', 'brick', [{ a: 6.715, b: 7.315, zb: 1.36, zt: 2.11 }], Object.assign({ endA: 'brick' }, gfIn));
   ew('x', 8.165, 8.545, 20.34, 21.34, -0.70, 2.88, 'p', 'brick', [], Object.assign({ endB: 'brick' }, gfIn));
@@ -1816,7 +1830,7 @@ function buildExterior(B, nb) {
   ew('x', 10.23, 10.53, 18.06, 19.96, -2.80, 5.02, 'p', 'woodClad', [{ a: 18.24, b: 18.82, zb: 2.48, zt: 4.88 }], {});
   ew('y', 17.68, 18.06, 8.86, 10.53, -2.80, 2.88, 'n', 'woodClad', [], { endB: 'woodClad', f: { zp: null } });
   ew('y', 17.82, 18.06, 10.23, 10.53, 2.88, 5.02, 'n', 'woodClad', [], { endB: 'woodClad' });
-  if (!nb) B.box(8.48, 8.86, 17.68, 18.06, -2.80, 2.88, { mat: 'plaster', ext: 0, collide: true });
+  B.box(8.48, 8.86, 17.68, 18.06, -2.80, 2.88, { mat: 'plaster', ext: 0, collide: true });
   // rear wall
   ew('x', 8.48, 8.86, 11.99, 17.68, -0.70, 2.88, 'p', 'brick',
     [{ a: 12.61, b: 14.21, zb: 0.61, zt: 2.37 }, { a: 14.21, b: 15.21, zb: 0, zt: 2.37 }, { a: 15.99, b: 17.19, zb: 1.07, zt: 2.13 }], gfIn);
@@ -1831,14 +1845,6 @@ function buildExterior(B, nb) {
   windowUnit(B, 'x', 2.79, -1, 2.67, 3.05, 18.19, 19.19, 0, 2.20, { door: true, noGlass: true });
   // stair window (tall, two panes)
   windowUnit(B, 'x', 10.41, 1, 10.53, 10.23, 18.24, 18.82, 2.48, 4.88, { transom: [3.95], inSillMat: 'woodDark', inSillCol: '#ffffff' });
-  // neighbour: closed leaves for its doors
-  if (nb) {
-    B.box(1.70, 1.76, 13.30, 14.22, 0.03, 2.30, { mat: 'woodDark', ext: 1 });
-    B.poly('glassNb', [[1.695, 13.40, 0.15], [1.695, 14.12, 0.15], [1.695, 14.12, 2.20], [1.695, 13.40, 2.20]], [-1, 0, 0], { ext: 1 });
-    B.box(8.71, 8.77, 14.25, 15.17, 0.03, 2.30, { mat: 'woodDark', ext: 1 });
-    B.poly('glassNb', [[8.775, 14.35, 0.15], [8.775, 15.07, 0.15], [8.775, 15.07, 2.20], [8.775, 14.35, 2.20]], [1, 0, 0], { ext: 1 });
-    B.box(2.80, 2.86, 18.24, 19.14, 0.02, 2.14, { mat: 'woodDark', ext: 1, collide: true });
-  }
   // porch & overhang soffits
   B.ceil(1.98, 2.67, 18.19, 19.96, LV.SOF, 'soffitP', { ext: 1 });
   B.box(8.86, 10.23, 11.99, 17.68, LV.SOF, 2.88, { mat: 'soffitP', ext: 1, f: { zp: null, xp: null, xn: null, yn: null } });
@@ -1857,9 +1863,9 @@ function buildExterior(B, nb) {
   ew('x', 1.60, 1.98, 18.19, 20.34, LV.SOF, 5.25, 'n', 'brick', [wU(18.20, 18.80)], Object.assign({ endB: 'brick', z1In: 5.40 }, ufIn));
   ew('y', 19.96, 20.34, 1.98, 2.67, LV.SOF, 5.02, 'p', 'brick', [], Object.assign({ z1In: 5.40 }, ufIn));
   ew('y', 19.96, 20.34, 2.67, 5.26, 2.88, 5.02, 'p', 'brick', [], Object.assign({ z1In: 5.40 }, ufIn));
-  if (!nb) B.box(5.26, 6.37, 19.96, 20.22, 5.00, 5.40, { mat: 'plaster', ext: 0 });
+  B.box(5.26, 6.37, 19.96, 20.22, 5.00, 5.40, { mat: 'plaster', ext: 0 });
   // alcove (bay above the pantry)
-  if (!nb) B.box(6.37, 6.75, 19.96, 20.22, 2.88, 5.38, { mat: 'plaster', ext: 0, fz: LV.U, cz: LV.UC, collide: true });
+  B.box(6.37, 6.75, 19.96, 20.22, 2.88, 5.38, { mat: 'plaster', ext: 0, fz: LV.U, cz: LV.UC, collide: true });
   B.box(6.37, 6.75, 20.22, 20.34, 2.84, 5.38, { mat: 'brick', ext: 1, collide: true, f: { xp: 'plaster', yn: null, yp: null }, fe: { xp: 0 }, fz: LV.U, cz: 5.00 });
   const alIn = { fz: LV.U, cz: 5.00 }; // alcove has a lowered ceiling
   ew('x', 6.37, 6.75, 20.34, 21.34, 2.84, 5.38, 'n', 'brick', [], Object.assign({ endB: 'brick' }, alIn));
@@ -1882,11 +1888,9 @@ function buildExterior(B, nb) {
   // balcony
   B.box(3.90, 6.37, 20.34, 21.42, 2.64, 2.84, { mat: 'concrete', ext: 1, f: { zp: null }, collide: false });
   B.floor(3.90, 6.37, 20.34, 21.42, 2.84, 'balconyTile', { ext: 1 });
-  B.floor(5.26, 6.37, 19.96, 20.34, 2.88, 'carpet', { ext: 0 });
+  B.floor(5.26, 6.37, 19.96, 20.34, 2.88, nb ? 'carpetRed' : 'carpet', { ext: 0 }); // Wei's house has red carpet
   railing(B, [[3.93, 20.34], [3.93, 21.39], [6.37, 21.39]], 2.84, 1.0, { col: '#55595c', sp: 0.12 });
   windowUnit(B, 'y', 20.22, 1, 20.34, 19.96, 5.26, 6.37, 2.88, 5.00, { door: true, noGlass: true, fw: 0.08 });
-  if (nb) { B.box(5.34, 6.30, 20.19, 20.25, 2.90, 4.92, { mat: 'woodDark', ext: 1, collide: true });
-    B.poly('glassNb', [[5.44, 20.26, 3.0], [6.20, 20.26, 3.0], [6.20, 20.26, 4.82], [5.44, 20.26, 4.82]], [0, 1, 0], { ext: 1 }); }
   // wall lamp + alarm box on the alcove west wall (seen from the balcony)
   B.box(6.30, 6.37, 20.95, 21.07, 4.15, 4.30, { mat: 'metal', col: '#1e1e1e', ext: 1 });
   B.box(6.33, 6.37, 20.55, 20.80, 4.55, 4.78, { mat: 'paint', col: '#e8e2c8', ext: 1 });
@@ -1933,7 +1937,7 @@ function buildExterior(B, nb) {
     // gable wall (brick) above eaves level
     const zu = (x) => roofTop(x) - th + 0.02;
     B.prismY([[1.60, 5.02], [10.53, 5.02], [10.53, zu(10.53)], [rx, zu(rx)], [1.60, zu(1.60)]], 20.22, 20.34, { mat: 'brick', ext: 1, f: { yn: 'plaster', side: 'plaster' }, fe: { yn: 0, side: 0 } });
-    if (!nb) B.prismY([[1.98, 5.40], [9.86, 5.40], [9.86, zu(9.86) - 0.02], [rx, zu(rx) - 0.02], [1.98, zu(1.98) - 0.02]], 19.96, 20.22, { mat: 'plaster', ext: 0 });
+    B.prismY([[1.98, 5.40], [9.86, 5.40], [9.86, zu(9.86) - 0.02], [rx, zu(rx) - 0.02], [1.98, zu(1.98) - 0.02]], 19.96, 20.22, { mat: 'plaster', ext: 0 });
     // gable vent
     B.box(5.70, 6.10, 20.34, 20.37, 6.55, 6.80, { mat: 'metal', col: '#4a4a4a', ext: 1 });
     // roof hatches
@@ -1963,7 +1967,6 @@ function buildExterior(B, nb) {
   // ---- Basement exterior (garage front) & ramp ----
   B.group = 'basement';
   ew('x', 1.68, 1.93, 12.26, 17.81, -2.80, -0.30, 'n', 'concrete', [{ a: 13.01, b: 17.42, zb: -2.61, zt: -0.53 }], { fz: LV.B, cz: LV.BC });
-  if (nb) B.box(1.77, 1.83, 13.01, 17.42, -2.61, -0.53, { mat: 'garageDoor', ext: 1, collide: true });
   // garage door frame trim
   B.box(1.66, 1.70, 12.95, 17.48, -0.56, -0.50, { mat: 'metal', col: '#d8d8d4', ext: 1 });
   B.group = 'site';
@@ -3764,7 +3767,7 @@ function buildSite(B) {
   const shrub = (x, y, r) => { const z = terrainH(x, y); B.sph(x, y, z + r * 0.6, r, r, r * 0.75, 7, { mat: 'foliage', ext: 1 }); };
   cypress(-0.9, 11.99, 6.2, 1.1);
   cypress(-1.0, 23.05, 5.4, 0.9); cypress(-1.0, MIRROR_Y - 23.05, 5.0, 0.85);
-  conifer(-7.8, 2.6, 13, 2.6); conifer(-9.4, 23.1, 7.5, 1.0);
+  conifer(-9.4, 23.1, 7.5, 1.0); // (the big conifer inside Wei's front gate was removed at the owner's request)
   decid(13.2, 23.0, 7.5, 2.4); decid(19.5, 19.0, 5.5, 2.0); decid(21.0, 5.5, 6.5, 2.3);
   conifer(24.0, 16.0, 9, 2.0); cypress(12.5, 11.2, 4.5, 0.9);
   for (const [x, y, r] of [[-4, 23.0, 0.6], [-6, 22.7, 0.8], [14, 23.3, 0.7], [17, 23.5, 0.8], [22, 23.2, 0.9], [15, 0.7, 0.8], [20, 0.9, 0.7], [11.9, 21.5, 0.5], [-9, 23.2, 0.9], [-9, 0.8, 0.9]]) shrub(x, y, r);
@@ -4069,13 +4072,6 @@ function buildFrontFence(B) {
     slatPanel(B, -11.295, F.pier1, F.fence1, -0.04, 1.10);
     B.addCollider(-11.35, -11.24, F.pier1, F.fence1, -0.04, 1.10);
     brickPier(B, -11.52, -11.07, F.fence1, F.side, 1.45);
-    if (nb) {
-      // neighbour's gates shown closed
-      slatPanel(B, -11.05, F.wall, F.car1, -0.62, 1.30, { mid: [carMid], t: 0.05 });
-      B.addCollider(-11.09, -11.01, F.wall, F.car1, -0.62, 1.30);
-      slatPanel(B, -11.30, F.pil1 + 0.03, F.gate1 - 0.02, -0.60, 1.20);
-      B.addCollider(-11.34, -11.26, F.pil1 + 0.03, F.gate1 - 0.02, -0.60, 1.20);
-    }
   }
   B.mirror = false;
   // our gates are interactive: sliding car gate and hinged entrance gate
@@ -4091,6 +4087,16 @@ function buildFrontFence(B) {
   P.box(-11.40, -11.20, g1 - 0.085, g1 - 0.07, 0.44, 0.46, { mat: 'metal', col: '#b9bcbe', ext: 1 });
   B.doorDefs.push({ id: 'gate', label: 'Entrance gate', group: 'site', builder: P, startOpen: true, openAngle: Math.PI / 2,
     hinge: [-11.30, g0], closed: [0, 1], w: g1 - g0, z0: -0.60, box: { x0: -11.34, x1: -11.26, y0: g0, y1: g1, z0: -0.60, z1: 1.20 } });
+  // the other half's gates: the same panels as before, now they open too (shut to start with) so its house can be reached
+  const M = MIRROR_Y;
+  const Gn = new Builder(); Gn.group = 'site'; Gn.collide = false; Gn.extF = 1; Gn.mirror = true;
+  slatPanel(Gn, -11.05, F.wall, F.car1, -0.62, 1.30, { mid: [carMid], t: 0.05 });
+  B.doorDefs.push({ id: 'nb-cargate', label: 'Car gate', group: 'site', builder: Gn, slide: [0, (F.car1 - F.wall) + 0.10], startOpen: false, openAngle: 0,
+    hinge: [-11.05, M - F.wall], closed: [0, -1], w: F.car1 - F.wall, z0: -0.62, box: { x0: -11.10, x1: -11.00, y0: M - F.car1, y1: M - F.wall, z0: -0.62, z1: 1.30 } });
+  const Pn = new Builder(); Pn.group = 'site'; Pn.collide = false; Pn.extF = 1; Pn.mirror = true;
+  slatPanel(Pn, -11.30, g0, g1, -0.60, 1.20);
+  B.doorDefs.push({ id: 'nb-gate', label: 'Entrance gate', group: 'site', builder: Pn, startOpen: false, openAngle: -Math.PI / 2,
+    hinge: [-11.30, M - g0], closed: [0, -1], w: g1 - g0, z0: -0.60, box: { x0: -11.34, x1: -11.26, y0: M - g1, y1: M - g0, z0: -0.60, z1: 1.20 } });
 }
 
 // ---------- Kont vezér utca: the other houses and the rest of the street (sketches) ----------
@@ -4231,6 +4237,204 @@ function buildStreet(B) {
 }
 // true if (x, y) is within m metres of one of the street houses (used to keep the tree ring off them)
 function nearStreetHouse(x, y, m) { for (const h of STREET_HOUSES) { let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const p of h.p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); } if (x > x0 - m && x < x1 + m && y > y0 - m && y < y1 + m) return true; } return false; }
+
+// ---------- The other half of the pair: the same unit as ours, mirrored across the party wall, left empty ----------
+// Wei's house. The two halves are built to one plan, mirrored, except the upper floor bedrooms (see below). This builds the
+// neighbour's interior from the structural parts of our half (interior.js, plus the alcove ceiling from desk.js and the bathroom floor from bathroom.js): walls with
+// their door openings and casings, floors, ceilings, both staircases, the chimney flues and the loft hatch, and its
+// doors. No furniture, kitchen, sanitary ware, radiators, lamps, curtains or pictures. Its windows and inner wall
+// layers come from buildExterior(B, true), the same as ours.
+function buildNeighbourHalf(B) {
+  B.mirror = true; B.forceGroup = 'nb'; B.extF = 0;
+  const { G, GC, KC, U, UC, B: BF, BC } = LV;
+
+  // =================== BASEMENT ===================
+  iw(B, 'y', 11.99, 12.26, 1.93, 8.53, -2.80, BC, BF, BC);
+  iw(B, 'x', 8.53, 8.94, 12.26, 17.81, -2.80, BC, BF, BC);
+  iw(B, 'y', 17.81, 18.06, 1.68, 8.53, -2.80, BC, BF, BC, [{ a: 6.55, b: 7.45, zb: BF, zt: BF + 2.02 }]);
+  doorTrim(B, 'y', 17.81, 18.06, 6.55, 7.45, BF, 2.02);
+  iw(B, 'x', 2.68, 2.93, 18.06, 20.26, -2.80, BC, BF, BC);
+  iw(B, 'y', 20.01, 20.26, 2.68, 4.33, -2.80, BC, BF, BC);
+  iw(B, 'x', 4.23, 4.33, 19.48, 20.01, -2.80, BC, BF, BC);
+  iw(B, 'x', 4.08, 4.33, 20.26, 21.24, -2.80, BC, BF, BC);
+  iw(B, 'y', 20.96, 21.24, 4.33, 8.46, -2.80, BC, BF, BC, [{ a: 4.95, b: 5.70, zb: -1.15, zt: -0.65 }]);
+  iw(B, 'x', 5.90, 6.00, 19.48, 20.96, -2.80, BC, BF, BC);
+  iw(B, 'y', 19.48, 19.58, 4.33, 4.88, -2.80, BC, BF, BC);
+  iw(B, 'y', 19.48, 19.58, 6.00, 6.30, -2.80, BC, BF, BC);
+  iw(B, 'x', 6.20, 6.30, 18.06, 19.48, -2.80, BC, BF, BC, [{ a: 18.42, b: 19.30, zb: BF, zt: BF + 2.02 }]);
+  doorTrim(B, 'x', 6.20, 6.30, 18.42, 19.30, BF, 2.02);
+  iw(B, 'x', 8.21, 8.46, 20.34, 21.24, -2.80, BC, BF, BC);
+  iw(B, 'y', 19.96, 20.06, 7.61, 8.46, -2.80, BC, BF, BC);
+  windowUnit(B, 'y', 21.13, 1, 21.24, 20.96, 4.95, 5.70, -1.15, -0.65, { noSill: true });
+  const bf = [[1.93, 8.53, 12.26, 17.81], [2.93, 6.20, 18.06, 19.48], [2.93, 4.23, 19.48, 20.01], [4.33, 5.90, 19.58, 20.96], [4.88, 5.90, 19.48, 19.58],
+    [6.30, 7.78, 18.06, 19.96], [6.00, 8.21, 20.06, 20.96], [6.00, 7.61, 19.96, 20.06], [6.00, 6.30, 19.58, 19.96],
+    [7.78, 10.23, 18.06, 18.96], [7.78, 8.24, 19.06, 19.96], [6.55, 7.45, 17.81, 18.06], [6.20, 6.30, 18.42, 19.30]];
+  for (const [a, b, c, d] of bf) B.floor(a, b, c, d, BF, 'bTile', { fz: BF, cz: BC });
+  B.floor(1.66, 1.93, 13.01, 17.42, -2.60, 'concrete', { ext: 1 });
+  B.poly('grate', [[7.80, 17.03, BF + 0.005], [8.36, 17.03, BF + 0.005], [8.36, 17.59, BF + 0.005], [7.80, 17.59, BF + 0.005]], [0, 0, 1], {}); // garage floor drain
+  const bc = [[1.93, 8.53, 12.26, 17.81], [2.93, 6.20, 18.06, 19.48], [2.93, 4.23, 19.48, 20.01], [4.33, 5.90, 19.58, 20.96], [4.88, 5.90, 19.48, 19.58],
+    [6.30, 7.78, 18.06, 19.96], [6.00, 8.21, 20.06, 20.96], [6.00, 7.61, 19.96, 20.06], [6.00, 6.30, 19.58, 19.96], [7.78, 8.40, 18.06, 18.96], [7.78, 8.24, 19.06, 19.96],
+    [6.55, 7.45, 17.81, 18.06], [6.20, 6.30, 18.42, 19.30]];
+  for (const [a, b, c, d] of bc) B.ceil(a, b, c, d, BC, 'ceiling', { fz: BF, cz: BC });
+  // ground floor slab edges at the stair hole
+  B.box(8.24, 8.40, 18.96, 19.06, BC, G, { mat: 'plaster' });
+  B.poly('plaster', [[8.40, 18.06, BC], [8.40, 18.96, BC], [8.40, 18.96, G], [8.40, 18.06, G]], [1, 0, 0], {});
+  B.poly('plaster', [[8.24, 19.06, BC], [8.24, 19.96, BC], [8.24, 19.96, G], [8.24, 19.06, G]], [1, 0, 0], {});
+
+  // =================== GROUND FLOOR ===================
+  iw(B, 'y', 11.99, 12.23, 1.98, 8.48, BC, 2.88, G, GC, [], { noTop: true });
+  iw(B, 'y', 17.81, 18.06, 2.67, 4.88, G, GC, G, GC);
+  iw(B, 'x', 6.08, 6.18, 15.36, 17.81, G, GC, G, GC);
+  B.box(5.78, 6.85, 15.20, 15.36, G, GC, { mat: 'brickIn', collide: true, fz: G, cz: GC });
+  iw(B, 'y', 15.26, 15.36, 7.88, 8.48, G, GC, G, GC);
+  iw(B, 'y', 15.26, 15.36, 6.85, 7.88, KC, GC, G, GC);
+  iw(B, 'y', 17.81, 17.91, 5.78, 6.88, G, GC, G, GC);
+  iw(B, 'y', 17.81, 17.91, 6.88, 7.78, KC, GC, G, GC);
+  iw(B, 'y', 17.81, 18.06, 7.78, 8.48, G, GC, G, GC);
+  iw(B, 'y', 17.81, 18.06, 4.88, 5.78, 2.30, GC, G, GC);
+  iw(B, 'x', 4.70, 4.80, 19.32, 19.72, G, GC, G, GC);
+  B.box(4.40, 4.85, 19.72, 19.96, G, GC, { mat: 'plaster', collide: true, fz: G, cz: GC });
+  iw(B, 'y', 19.96, 20.06, 4.33, 8.165, G, GC, G, GC, [{ a: 4.955, b: 5.705, zb: G, zt: 2.05 }, { a: 6.955, b: 7.705, zb: G, zt: 2.05 }]);
+  doorTrim(B, 'y', 19.96, 20.06, 4.955, 5.705, G, 2.05); doorTrim(B, 'y', 19.96, 20.06, 6.955, 7.705, G, 2.05);
+  iw(B, 'x', 6.335, 6.585, 20.06, 20.96, G, GC, G, GC);
+  // chimney flue against the party wall, under the upper floor flue box (plain plaster: no fireplace fitted)
+  B.box(4.51, 4.88, 12.23, 12.60, G, GC, { mat: 'plaster', collide: true, fz: G, cz: GC });
+  // stair stringer wall
+  B.box(7.78, 9.28, 18.96, 19.06, BF, 3.88, { mat: 'plaster', collide: true });
+  B.box(9.23, 9.33, 18.96, 19.06, BF, 3.88, { mat: 'plaster', collide: true });
+  const gf = [[1.98, 8.48, 12.23, 15.26], [1.98, 6.08, 15.26, 17.81], [6.18, 8.48, 15.36, 17.81], [6.08, 6.18, 15.26, 15.36],
+    [4.88, 5.78, 17.81, 18.06], [5.78, 6.88, 17.91, 18.06], [6.88, 7.78, 17.81, 18.06], [3.05, 7.78, 18.06, 19.96],
+    [7.78, 8.40, 18.06, 18.96], [7.78, 8.24, 19.06, 19.96], [4.33, 6.335, 20.06, 20.96], [6.585, 8.165, 20.06, 20.96],
+    [4.955, 5.705, 19.96, 20.06], [6.955, 7.705, 19.96, 20.06], [2.67, 3.05, 18.19, 19.19], [1.60, 1.98, 13.26, 14.26], [8.48, 8.86, 14.21, 15.21]];
+  for (const [a, b, c, d] of gf) B.floor(a, b, c, d, G, 'floorGF', { fz: G, cz: GC });
+  const gc = [[1.98, 8.48, 12.23, 15.26, GC], [1.98, 6.08, 15.26, 17.81, GC], [6.18, 8.48, 15.36, 17.81, KC], [4.88, 5.78, 17.81, 18.06, 2.30],
+    [5.78, 6.88, 17.91, 18.06, GC], [6.88, 7.78, 17.91, 18.06, GC], [3.05, 7.78, 18.06, 19.96, GC], [7.78, 8.20, 18.06, 18.96, GC], [7.78, 8.20, 19.06, 19.96, GC],
+    [4.33, 6.335, 20.06, 20.96, GC], [6.585, 8.165, 20.06, 20.96, GC]];
+  for (const [a, b, c, d, z] of gc) B.ceil(a, b, c, d, z, 'ceiling', { fz: G, cz: GC });
+  B.poly('plaster', [[8.20, 18.06, GC], [8.20, 18.96, GC], [8.20, 18.96, U], [8.20, 18.06, U]], [1, 0, 0], {});
+  B.poly('plaster', [[8.20, 19.06, GC], [8.20, 19.96, GC], [8.20, 19.96, U], [8.20, 19.06, U]], [1, 0, 0], {});
+
+  // ---- stairs: basement <-> ground <-> upper (the same flights and winders as ours) ----
+  const C = [9.28, 19.01];
+  const wpoly = (k) => {
+    const R = [9.28, 10.23, 18.06, 19.96];
+    const hit = (phi) => { const dx = Math.sin(phi), dy = Math.cos(phi); let t = 1e9;
+      if (dx > 1e-6) t = Math.min(t, (R[1] - C[0]) / dx); if (dy > 1e-6) t = Math.min(t, (R[3] - C[1]) / dy); if (dy < -1e-6) t = Math.min(t, (R[2] - C[1]) / dy);
+      if (dx < -1e-6) t = Math.min(t, (R[0] - C[0]) / dx); return [C[0] + dx * t, C[1] + dy * t]; };
+    const p0 = k * Math.PI / 6, p1 = (k + 1) * Math.PI / 6;
+    const pts = [C, hit(p0)];
+    const corners = [[10.23, 19.96, Math.atan2(10.23 - C[0], 19.96 - C[1])], [10.23, 18.06, Math.atan2(10.23 - C[0], 18.06 - C[1])]];
+    for (const [x, y, a] of corners) if (a > p0 + 1e-6 && a < p1 - 1e-6) pts.push([x, y]);
+    pts.push(hit(p1));
+    return pts;
+  };
+  const stepPrism = (pts, z, depth, mat) => {
+    B.poly(mat, pts.map(p => [p[0], p[1], z]), [0, 0, 1], {}); B.poly('plaster', pts.map(p => [p[0], p[1], z - depth]), [0, 0, -1], {});
+    const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+    for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; const ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey); if (l < 1e-4) continue;
+      let n = [ey / l, -ex / l, 0]; if ((a[0] - cx) * n[0] + (a[1] - cy) * n[1] < 0) n = [-n[0], -n[1], 0];
+      B.poly(mat, [[a[0], a[1], z], [b[0], b[1], z], [b[0], b[1], z - depth], [a[0], a[1], z - depth]], n, {}); }
+    B.addWalkPoly(pts, z, mat);
+  };
+  const rect = (x0, x1, y0, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  const lsx = [7.93, 8.20, 8.47, 8.74, 9.01, 9.28];
+  for (let i = 0; i < 5; i++) stepPrism(rect(lsx[i], lsx[i + 1], 19.06, 19.96), 0.18 * (i + 1), 0.30, 'carpetRed');
+  for (let k = 0; k < 6; k++) stepPrism(wpoly(k), 0.18 * (6 + k), 0.30, 'carpetRed');
+  const lnx = [9.28, 9.01, 8.74, 8.47, 8.20];
+  for (let i = 0; i < 4; i++) stepPrism(rect(lnx[i + 1], lnx[i], 18.06, 18.96), 0.18 * (12 + i), 0.30, 'carpetRed');
+  const bn = [8.40, 8.693, 8.987, 9.28];
+  for (let i = 0; i < 3; i++) stepPrism(rect(bn[i], bn[i + 1], 18.06, 18.96), -0.185 * (i + 1), 0.30, 'bTile');
+  for (let k = 5; k >= 0; k--) { const zt = -0.185 * (4 + (5 - k)); stepPrism(wpoly(k), zt, zt - BF, 'bTile'); }
+  const bs = [9.28, 9.02, 8.76, 8.50, 8.24];
+  for (let i = 0; i < 4; i++) { const zt = -0.185 * (10 + i); stepPrism(rect(bs[i + 1], bs[i], 19.06, 19.96), zt, zt - BF, 'bTile'); }
+  const soffit = (xa, za, xb, zb, y0, y1) => { const n = [-(zb - za), 0, (xb - xa)], l = Math.hypot(...n), N = [n[0] / l, 0, n[2] / l];
+    B.poly('plaster', [[xa, y0, za], [xb, y0, zb], [xb, y1, zb], [xa, y1, za]], N[2] < 0 ? N : N.map(v => -v), {}); };
+  soffit(7.93, -0.13, 9.28, 0.77, 19.06, 19.96);
+  soffit(8.20, 2.39, 9.28, 1.67, 18.06, 18.96);
+  soffit(8.40, -0.49, 9.28, -1.045, 18.06, 18.96);
+  B.poly('plaster', [[8.20, 18.06, 2.39], [8.20, 18.96, 2.39], [8.20, 18.96, GC], [8.20, 18.06, GC]], [1, 0, 0], {});
+  B.poly('plaster', [[8.40, 18.06, -0.49], [8.40, 18.96, -0.49], [8.40, 18.96, BC], [8.40, 18.06, BC]], [1, 0, 0], {});
+  B.cylP([8.30, 19.93, BF + 0.95], [9.25, 19.93, -1.85 + 0.95], 0.02, 6, { mat: 'metal', col: '#555' }); // handrail on the basement run
+
+  // =================== UPPER FLOOR ===================
+  // Not a mirror of ours here (upper floor plan, 1:50): on this side the party wall is 30 cm (ours 17 cm); the two
+  // street-side bedrooms are 8.32 m² (by the party wall) and 8.60 m², the dividing wall stepping round a cupboard
+  // niche of the far room; a 2.60 m² walk-in wardrobe opens off the end of the landing between the near bedroom and
+  // the 10.92 m² rear bedroom; the bathroom wall has its 1.935 m cabinet recess on the bathroom side and an 85 cm
+  // wardrobe niche on the bedroom side by the rear wall. The shower room, stair landing and alcove are as ours.
+  // (Coordinates are written in our half's frame and mirrored by the builder.)
+  iw(B, 'y', 11.99, 12.32, 1.98, 9.86, U, 5.40, U, UC);                       // party wall, 30 cm on this side
+  iw(B, 'y', 15.17, 15.27, 1.98, 4.11, U, UC, U, UC);                          // between the two street bedrooms
+  iw(B, 'x', 4.01, 4.11, 14.97, 15.17, U, UC, U, UC);
+  iw(B, 'y', 14.87, 14.97, 4.01, 5.16, U, UC, U, UC);                          // round the far room's cupboard niche
+  iw(B, 'x', 4.87, 4.97, 12.32, 13.795, U, UC, U, UC);                         // near bedroom / walk-in wardrobe
+  iw(B, 'y', 13.795, 13.895, 4.87, 6.64, U, UC, U, UC, [{ a: 5.26, b: 6.35, zb: U, zt: U + 2.10 }]); // wardrobe opening
+  iw(B, 'x', 5.16, 5.26, 13.895, 17.82, U, UC, U, UC, [{ a: 13.945, b: 14.82, zb: U, zt: U + 2.05 }, { a: 15.83, b: 16.70, zb: U, zt: U + 2.05 }]);
+  doorTrim(B, 'x', 5.16, 5.26, 13.945, 14.82, U, 2.05); doorTrim(B, 'x', 5.16, 5.26, 15.83, 16.70, U, 2.05);
+  iw(B, 'y', 17.82, 18.07, 1.98, 5.26, U, UC, U, UC);
+  iw(B, 'x', 5.16, 5.26, 18.07, 19.96, U, UC, U, UC, [{ a: 18.12, b: 18.87, zb: U, zt: U + 2.05 }]);
+  doorTrim(B, 'x', 5.16, 5.26, 18.12, 18.87, U, 2.05);
+  B.box(2.88, 2.98, 18.92, 19.96, U, U + 2.10, { mat: 'plaster', collide: true, fz: U, cz: UC }); // shower enclosure wall
+  iw(B, 'x', 6.64, 6.74, 12.32, 17.82, U, UC, U, UC, [{ a: 14.345, b: 15.22, zb: U, zt: U + 2.05 }, { a: 16.22, b: 16.97, zb: U, zt: U + 2.05 }]);
+  doorTrim(B, 'x', 6.64, 6.74, 14.345, 15.22, U, 2.05); doorTrim(B, 'x', 6.64, 6.74, 16.22, 16.97, U, 2.05);
+  // rear bedroom / bathroom wall: cabinet recess on the bathroom side, wardrobe niche on the bedroom side
+  iw(B, 'y', 15.69, 16.04, 6.74, 7.00, U, UC, U, UC);
+  iw(B, 'y', 15.69, 15.79, 7.00, 8.92, U, UC, U, UC);
+  iw(B, 'y', 15.69, 16.04, 8.92, 9.02, U, UC, U, UC);
+  iw(B, 'y', 15.94, 16.04, 9.02, 9.86, U, UC, U, UC);
+  iw(B, 'y', 17.82, 18.06, 6.64, 10.23, U, UC, U, UC);
+  // chimney flue with a small service duct beside it (in the near bedroom's corner), and the stair-side flue box
+  B.box(4.51, 4.86, 12.32, 12.61, U, UC, { mat: 'plaster', collide: true, fz: U, cz: UC });
+  B.box(4.38, 4.51, 12.32, 12.545, U, UC, { mat: 'plaster', collide: true, fz: U, cz: UC });
+  B.box(4.05, 4.51, 12.545, 12.61, U, UC, { mat: 'plaster', collide: true, fz: U, cz: UC });
+  B.box(4.47, 4.85, 19.72, 19.96, U, UC, { mat: 'plaster', collide: true, fz: U, cz: UC });
+  // stair parapets and their handrail caps
+  B.box(7.60, 7.78, 18.96, 19.06, U, 3.88, { mat: 'plaster', collide: true });
+  B.box(8.18, 8.28, 19.06, 19.96, U, 3.88, { mat: 'plaster', collide: true });
+  B.box(7.57, 9.33, 18.93, 19.09, 3.88, 3.93, { mat: 'woodDark', col: '#5a3a2a' });
+  B.box(8.15, 8.31, 19.09, 19.99, 3.88, 3.93, { mat: 'woodDark', col: '#5a3a2a' });
+  const uf = [[1.98, 4.97, 12.32, 17.82, 'carpetRed'], [4.97, 5.26, 13.795, 17.82, 'carpetRed'], [4.97, 6.64, 12.32, 13.795, 'carpetRed'], [5.26, 6.64, 13.795, 18.06, 'carpetRed'],
+    [6.64, 9.86, 12.32, 15.69, 'carpetRed'], [9.02, 9.86, 15.69, 15.94, 'carpetRed'],
+    [6.74, 9.86, 16.04, 17.82, 'bathFloor'], [7.00, 8.92, 15.79, 16.04, 'bathFloor'], [6.64, 6.74, 16.22, 16.97, 'bathFloor'],
+    [1.98, 5.16, 18.07, 19.96, 'bathFloor'], [5.26, 8.20, 18.06, 19.96, 'carpetRed'], [6.75, 8.165, 19.96, 20.96, 'carpetRed'], [5.16, 5.26, 18.12, 18.87, 'bathFloor']];
+  for (const [a, b, c, d, m] of uf) B.floor(a, b, c, d, U, m, { fz: U, cz: UC });
+  const ucs = [[1.98, 9.86, 12.32, 17.82], [5.16, 6.64, 17.82, 18.06], [1.98, 5.16, 18.07, 19.96], [5.26, 10.23, 18.06, 19.96]];
+  for (const [a, b, c, d] of ucs) B.ceil(a, b, c, d, UC, 'ceiling', { fz: U, cz: UC });
+  // the alcove at the top of the stairs: lowered ceiling with a lintel towards the landing
+  const AC = 5.00, AL = { ext: 0, fz: U, cz: AC };
+  B.ceil(6.75, 8.165, 19.96, 20.96, AC, 'ceiling', AL);
+  B.poly('plaster', [[6.75, 19.96, AC], [8.165, 19.96, AC], [8.165, 19.96, UC], [6.75, 19.96, UC]], [0, -1, 0], { ext: 0, fz: U, cz: UC });
+  B.poly('plaster', [[8.162, 19.96, U], [8.162, 20.345, U], [8.162, 20.345, AC], [8.162, 19.96, AC]], [-1, 0, 0], AL);
+  B.poly('plaster', [[6.753, 19.96, U], [6.753, 20.345, U], [6.753, 20.345, AC], [6.753, 19.96, AC]], [1, 0, 0], AL);
+  B.box(5.40, 6.85, 18.80, 19.40, UC - 0.02, UC, { mat: 'woodLight', f: { zp: null } }); // loft hatch
+
+  // =================== DOORS (the same doors as ours, mirrored) ===================
+  const M = MIRROR_Y;
+  const T = (id, label, hinge, closed, open, w, z0, h, o = {}) => doorLeaf(B, Object.assign({ id: 'nb-' + id, label, group: 'nb',
+    hinge: [hinge[0], M - hinge[1]], closed: [closed[0], -closed[1]], open: [open[0], -open[1]], w, z0, h, mat: o.glass ? 'woodDark' : 'doorLeaf', startOpen: true }, o));
+  // outside doors start closed, as they were shown before
+  T('front', 'Front door', [2.83, 18.24], [0, 1], [1, 0], 0.90, 0.01, 2.13, { t: 0.06, ext: 1, startOpen: false });
+  T('terrace', 'Street terrace door', [1.74, 13.33], [0, 1], [1, 0], 0.86, 0.03, 2.27, { glass: true, t: 0.06, startOpen: false });
+  T('garden', 'Garden door', [8.72, 15.14], [0, -1], [-1, 0], 0.86, 0.03, 2.27, { glass: true, t: 0.06, startOpen: false });
+  T('balcony', 'Balcony door', [6.29, 20.22], [-1, 0], [0, -1], 0.95, U + 0.03, 2.02, { glass: true, t: 0.06, startOpen: false });
+  T('wc', 'WC door', [4.985, 20.01], [1, 0], [0, -1], 0.69, 0.01, 2.02);
+  T('pantry', 'Pantry door', [7.675, 20.01], [-1, 0], [0, -1], 0.69, 0.01, 2.02);
+  T('storage', 'Storage door', [6.25, 18.45], [0, 1], [-1, 0], 0.82, BF + 0.01, 1.99);
+  T('garagein', 'Garage door (inner)', [6.58, 17.935], [1, 0], [0, 1], 0.84, BF + 0.01, 1.99);
+  T('bed1', 'Front bedroom door', [5.21, 14.79], [0, -1], [-1, 0], 0.82, U + 0.01, 2.02);
+  T('bed2', 'Small bedroom door', [5.21, 15.86], [0, 1], [-1, 0], 0.81, U + 0.01, 2.02);
+  T('bed3', 'Rear bedroom door', [6.69, 15.19], [0, -1], [1, 0], 0.82, U + 0.01, 2.02);
+  T('bath', 'Bathroom door', [6.69, 16.25], [0, 1], [1, 0], 0.69, U + 0.01, 2.02);
+  T('shower', 'Shower room door', [5.21, 18.15], [0, 1], [-1, 0], 0.69, U + 0.01, 2.02);
+  // garage door (up-and-over): it swings about a line along plan y, which the mirror leaves unchanged
+  const D = new Builder(); D.group = 'nb'; D.collide = false; D.mirror = true;
+  D.box(1.77, 1.83, 13.01, 17.42, -2.61, -0.53, { mat: 'garageDoor', ext: 1 });
+  D.box(1.83, 1.86, 15.10, 15.35, -1.62, -1.58, { mat: 'metal', col: '#666' });
+  B.doorDefs.push({ id: 'nb-garage', label: 'Garage door', group: 'nb', builder: D, garage: true, startOpen: false, openAngle: Math.PI / 2,
+    box: { x0: 1.74, x1: 1.86, y0: M - 17.42, y1: M - 13.01, z0: -2.61, z1: -0.53 }, center: [1.9, M - 15.2, -1.6] });
+
+  B.mirror = false; B.forceGroup = null; B.extF = 0; B.group = 'site';
+}
 
 // ---------- Foam-dart blaster: first-person toy blaster, darts with simple physics ----------
 // A generic toy blaster (no brand markings). Held in the right hand when walking; darts fly with gravity and drag,
@@ -4654,7 +4858,7 @@ setTimeout(function () {
     brick: M('brick', { spec: 0.05, shin: 10 }), brickIn: M('brick', { spec: 0.05, tint: [0.50, 0.36, 0.32] }), doorLeaf: M('woodDarkV', { spec: 0.22, shin: 30 }), woodClad: M('woodClad', { spec: 0.06, shin: 12 }),
     plaster: M('plaster', { tint: [0.86, 0.855, 0.84] }), ceiling: M('plaster', { tint: [0.88, 0.88, 0.87] }),
     soffitP: M('plaster', { tint: [0.80, 0.74, 0.64] }), soffit: M('woodDark', { tint: [0.55, 0.55, 0.55] }), fascia: M('woodDark', { tint: [0.45, 0.45, 0.45] }),
-    floorGF: M('floorGF', { spec: 0.30, shin: 45, refl: 0.10 }), carpet: M('carpet'), deck: M('deck', { spec: 0.05 }),
+    floorGF: M('floorGF', { spec: 0.30, shin: 45, refl: 0.10 }), carpet: M('carpet'), carpetRed: M('carpet', { tint: [1.45, 0.33, 0.33] }), deck: M('deck', { spec: 0.05 }),
     roof: M('roof', { spec: 0.14, shin: 22 }), roofRed: M('roof', { tint: [2.2, 1.35, 1.0] }), grass: M('grass'), pavers: M('pavers'), gravel: M('gravel'), grassPaver: M('grassPaver'),
     concrete: M('concrete'), asphalt: M('asphalt', { spec: 0.05 }), render: M('plaster', { tint: [0.95, 0.93, 0.9] }),
     zellige: M('zellige', { spec: 0.55, shin: 70, refl: 0.18 }), bathTile: M('bathTile', { spec: 0.45, shin: 60, refl: 0.12 }), bathFloor: M('bathFloor', { spec: 0.3, shin: 40 }), bTile: M('bTile', { spec: 0.25 }),
@@ -4697,6 +4901,7 @@ setTimeout(function () {
   buildLivingCorner(B);
   buildSite(B);
   buildDoors(B);
+  buildNeighbourHalf(B);
   B.mirror = false;
   const groups = { site: [], nb: [], basement: [], ground: [], upper: [], roof: [] };
   let triCount = 0;
@@ -4800,7 +5005,7 @@ setTimeout(function () {
     return !ok;
   }
   // walking pace like a real person: about 1.3 m/s, a brisk jog with Shift, slow when crouching
-  const WALK = 1.3, RUN = 2.8;
+  const WALK = 1.7, RUN = 3.8;
   let bobW = 0;
   function move(dt) {
     const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) + touchMove.f;
@@ -4854,7 +5059,7 @@ setTimeout(function () {
     const f = floorAt(P.x, P.y, P.z + 0.02);
     if (P.z > f + 0.001) { P.vz -= 9.8 * dt; P.z = Math.max(f, P.z + P.vz * dt); if (P.z <= f) P.vz = 0; }
     // footsteps, by floor type
-    const moved = Math.hypot(P.x - x0, P.y - y0), fast = running && vl > 2.0, stride = crouch ? 0.45 : fast ? 0.95 : child ? 0.55 : 0.72;
+    const moved = Math.hypot(P.x - x0, P.y - y0), fast = running && vl > 2.0, stride = crouch ? 0.45 : fast ? 1.10 : child ? 0.60 : 0.80;
     if (moved > 0.0005 && P.vz === 0) {
       stepAcc += moved;
       if (stepAcc >= stride) { stepAcc -= stride; footSide = -footSide; SND.step(groundKind(), footSide * 0.12, (crouch ? 0.45 : fast ? 1.25 : child ? 0.8 : 1) * Math.min(1, 0.4 + vl / vmax * 0.6)); }
@@ -4931,11 +5136,21 @@ setTimeout(function () {
     ['Rear bedroom', 'U', 6.08, 9.86, 12.17, 15.94, '12.36 m²'], ['Bathroom', 'U', 6.74, 9.86, 16.04, 17.82, ''], ['Balcony', 'U', 3.90, 6.37, 20.34, 21.42, ''],
     ['Street terrace', 'O', 0.07, 1.60, 12.35, 19.47, '11.40 m²'], ['Entrance porch', 'O', 1.60, 2.67, 18.19, 20.34, ''], ['Garden terrace', 'O', 8.86, 11.63, 12.21, 18.10, '']
   ];
+  // the other half's upper floor rooms (blueprint), in our half's frame (mirrored when used)
+  const NB_UROOMS = [['Walk-in wardrobe', 'U', 4.97, 6.64, 12.32, 13.795, '2.60 m²'], ['Front bedroom', 'U', 1.98, 5.16, 12.32, 15.17, '8.32 m²'], ['Small bedroom', 'U', 1.98, 5.16, 15.17, 17.82, '8.60 m²'],
+    ['Landing', 'U', 5.26, 6.64, 13.895, 18.06, '5.78 m²'], ['Rear bedroom', 'U', 6.74, 9.86, 12.32, 15.69, '10.92 m²'], ['Rear bedroom', 'U', 9.02, 9.86, 15.69, 15.94, '10.92 m²'],
+    ['Bathroom', 'U', 6.74, 9.86, 16.04, 17.82, ''], ['Bathroom', 'U', 7.00, 8.92, 15.79, 16.04, '']];
   const LEVELNAME = { B: ['Basement', '−2.59'], G: ['Ground floor', '±0.00'], U: ['Upper floor', '+2.88'], O: ['Outside', ''] };
   function whereAmI() { return whereAt(P.x, P.y, P.z); }
   function whereAt(x, y, z) {
     const lv = z < -1.3 ? 'B' : z < 1.6 ? 'G' : 'U';
     const inR = (r, m = 0) => x >= r[2] - m && x <= r[3] + m && y >= r[4] - m && y <= r[5] + m;
+    if (y < 11.988) { // the other half: the same rooms mirrored across the party wall, except its own upstairs bedrooms
+      const my = MIRROR_Y - y, inM = (r, m) => x >= r[2] - m && x <= r[3] + m && my >= r[4] - m && my <= r[5] + m;
+      const list = lv === 'U' ? NB_UROOMS.concat(ROOMS.filter(r => r[1] === 'U' && r[4] >= 17.8)) : ROOMS;
+      for (const m of [0, 0.3]) for (const r of list) if (r[1] === lv && inM(r, m)) return { name: "Neighbour's " + (/^[A-Z][a-z]/.test(r[0]) ? r[0][0].toLowerCase() + r[0].slice(1) : r[0]), area: r[6], lv };
+      return { name: "Neighbour's side", area: '', lv: 'O' };
+    }
     for (const r of ROOMS) if (r[1] === lv && inR(r)) return { name: r[0], area: r[6], lv };
     for (const r of ROOMS) if (r[1] === lv && inR(r, 0.3)) return { name: r[0], area: r[6], lv };
     if (y >= 11.988 && z < -0.70 && inRamp(x, y)) return { name: 'Driveway ramp', area: '', lv: 'O' };
@@ -4958,7 +5173,7 @@ setTimeout(function () {
   let child = false, crouch = false, pose = null, stepAcc = 0, footSide = 1;
   try { child = localStorage.getItem('kh-child') === '1'; } catch (e) {}
   const eyeStand = () => child ? 1.20 : 1.62, eyeCrouch = () => child ? 0.55 : 0.72, seatEye = () => child ? 0.56 : 0.74;
-  const FLOOR = { carpet: 'carpet', rug: 'carpet', bathFloor: 'tile', bTile: 'tile', ubFloor: 'tile', floorGF: 'tile', balconyTile: 'tile', zellige: 'tile', deck: 'wood', woodLight: 'wood', oak: 'wood', concrete: 'stone', pavers: 'stone' };
+  const FLOOR = { carpet: 'carpet', carpetRed: 'carpet', rug: 'carpet', bathFloor: 'tile', bTile: 'tile', ubFloor: 'tile', floorGF: 'tile', balconyTile: 'tile', zellige: 'tile', deck: 'wood', woodLight: 'wood', oak: 'wood', concrete: 'stone', pavers: 'stone' };
   function groundKind() {
     for (const w of near(wgrid, P.x, P.y)) if (Math.abs(w.z - P.z) < 0.03 && inPatch(w, P.x, P.y)) return FLOOR[w.mat] || 'stone';
     if (inRamp(P.x, P.y) || P.x < -11.3) return 'stone';
@@ -4973,7 +5188,7 @@ setTimeout(function () {
   for (const st of B.seats) acts.push({ type: st.kind, s: st, c: st.kind === 'lie' ? [st.x + st.face[0] * 0.75, st.y + st.face[1] * 0.75, st.seatZ] : [st.x, st.y, st.kind === 'bunk' ? st.seatZ - 0.4 : st.seatZ],
     reach: st.kind === 'lie' ? 1.8 : st.kind === 'bunk' ? 1.3 : 1.5, cone: st.kind === 'lie' ? 0.75 : 0.65, pad: 0.12 });
   function closedCenter(d) { return [d.hinge[0] + d.closed[0] * d.w / 2, d.hinge[1] + d.closed[1] * d.w / 2, d.z0 + 1.0]; }
-  function actCenter(a) { return a.type === 'door' ? (a.d.garage ? (P.x < 1.8 ? [1.75, 15.2, -1.6] : [1.95, 15.2, -1.6]) : closedCenter(a.d)) : a.c; }
+  function actCenter(a) { return a.type === 'door' ? (a.d.garage ? [P.x < 1.8 ? 1.75 : 1.95, a.d.center[1], -1.6] : closedCenter(a.d)) : a.c; }
   function actLabel(a) {
     if (a.type === 'door') return (a.d.target ? 'Close ' : 'Open ') + a.d.label.charAt(0).toLowerCase() + a.d.label.slice(1);
     if (a.type === 'part') return a.d.verbs[a.d.target ? 1 : 0] + ' ' + a.d.label;
